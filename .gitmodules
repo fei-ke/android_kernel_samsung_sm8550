@@ -2,4 +2,4 @@
 	path = KernelSU
 	url = https://github.com/tiann/KernelSU.git
 [submodule "KernelSU/"]
-	url = https://github.com/Ylarod/KernelSU.git
+	url = https://github.com/tiann/KernelSU.git
