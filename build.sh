@@ -26,11 +26,23 @@ TARGET_DEFCONFIG=${1:-kalama_gki_defconfig}
 
 cd "$(dirname "$0")"
 
-ARGS='
+LOCALVERSION=-android13-8
+
+if [ "$LTO" == "thin" ]; then
+  LOCALVERSION+="-thin"
+fi
+
+ARGS="
 CC=clang
 ARCH=arm64
 LLVM=1 LLVM_IAS=1
-LOCALVERSION=-android13-8
-'
+LOCALVERSION=$LOCALVERSION
+"
+
 make -j$(nproc) -C $(pwd) O=$(pwd)/out ${ARGS} $TARGET_DEFCONFIG
+
+if [ "$LTO" = "thin" ]; then
+  ./scripts/config --file out/.config -e LTO_CLANG_THIN -d LTO_CLANG_FULL
+fi
+
 make -j$(nproc) -C $(pwd) O=$(pwd)/out ${ARGS}
