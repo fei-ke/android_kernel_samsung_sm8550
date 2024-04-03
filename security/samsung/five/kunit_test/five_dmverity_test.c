@@ -8,6 +8,7 @@
 #include "drivers/md/dm.h"
 #include "drivers/md/dm-core.h"
 #include "drivers/block/loop.h"
+#include "uapi/linux/major.h"
 
 #include "five_dmverity.h"
 #include "test_helpers.h"
@@ -83,9 +84,15 @@ static struct mapped_device *create_mapped_device_obj(
 	DECLARE_NEW(test, struct mapped_device, foo);
 
 	foo->disk = NEW(test, struct gendisk);
+#ifndef FIVE_KUNIT_SM8650U
 	foo->disk->part0.policy = policy;
+#else
+	foo->disk->part0 = NEW(test, struct block_device);
+	foo->disk->part0->bd_read_only = policy;
+#endif
+
 	if (strlen(disk_name) < DISK_NAME_LEN)
-		strncpy(foo->disk->disk_name, disk_name, strlen(disk_name) + 1);
+		memcpy(foo->disk->disk_name, disk_name, strlen(disk_name) + 1);
 	return foo;
 }
 

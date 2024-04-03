@@ -20,7 +20,7 @@
 #include <linux/cn_proc.h>
 #include <linux/local_lock.h>
 
-int is_heimdall_enabled = 0;
+extern int is_heimdall_enabled;
 
 /*
  * Size of a cn_msg followed by a proc_event structure.  Since the
@@ -424,9 +424,7 @@ static void cn_proc_mcast_ctl(struct cn_msg *msg,
 	else
 		mask = *(uint32_t *)(mc_op + 1);
 	pr_info("%s: client connected with event mask=0x%x\n", __func__, mask);
-#endif
 
-#ifdef CONFIG_PROC_CONNECTOR_SELECT_EVENTS
 	if (msg->len != sizeof(*mc_op))
 		is_heimdall_enabled = 1;
 #endif

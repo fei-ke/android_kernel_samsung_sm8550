@@ -17,7 +17,6 @@
 #include <linux/module.h>
 #include <linux/file.h>
 #include <linux/task_integrity.h>
-#include <linux/xattr.h>
 #include <linux/fs.h>
 #include <linux/proca.h>
 #include <linux/cdev.h>
@@ -29,11 +28,9 @@
 #include "proca_log.h"
 #include "proca_config.h"
 #include "proca_porting.h"
+#include "proca_storage.h"
 
 #define PROCA_DEV_NAME "proca_config"
-
-#define XATTR_PA_SUFFIX "pa"
-#define XATTR_NAME_PA (XATTR_USER_PREFIX XATTR_PA_SUFFIX)
 
 #include "five_hooks.h"
 
@@ -52,13 +49,13 @@ static void proca_hook_task_forked(struct task_struct *parent,
 
 static void proca_hook_file_processed(struct task_struct *task,
 				enum task_integrity_value tint_value,
-				struct file *file, void *xattr,
-				size_t xattr_size, int result);
+				struct file *file, void *cert,
+				size_t cert_size, int result);
 
 static void proca_hook_file_signed(struct task_struct *task,
 				enum task_integrity_value tint_value,
-				struct file *file, void *xattr,
-				size_t xattr_size, int result);
+				struct file *file, void *cert,
+				size_t cert_size, int result);
 
 static void proca_hook_file_skipped(struct task_struct *task,
 				enum task_integrity_value tint_value,
@@ -79,61 +76,28 @@ static struct class *proca_class;
 
 static int g_proca_inited;
 
-static int read_xattr(struct dentry *dentry, const char *name,
-			char **xattr_value)
-{
-	ssize_t ret;
-	void *buffer = NULL;
-
-	dentry = d_real_comp(dentry);
-
-	*xattr_value = NULL;
-	ret = __vfs_getxattr(dentry, dentry->d_inode, name,
-				NULL, 0, XATTR_NOSECURITY);
-	if (ret <= 0)
-		return 0;
-
-	buffer = kmalloc(ret + 1, GFP_NOFS);
-	if (!buffer)
-		return 0;
-
-	ret = __vfs_getxattr(dentry, dentry->d_inode, name,
-				buffer, ret + 1, XATTR_NOSECURITY);
-
-	if (ret <= 0) {
-		ret = 0;
-		kfree(buffer);
-	} else {
-		*xattr_value = buffer;
-	}
-
-	return ret;
-}
-
 static struct proca_task_descr *prepare_proca_task_descr(
 				struct task_struct *task, struct file *file,
 				const enum task_integrity_value tint_value)
 {
 	struct proca_certificate parsed_cert;
 	struct proca_identity ident;
-	char *pa_xattr_value = NULL;
-	size_t pa_xattr_size;
+	char *cert_buff = NULL;
+	int cert_size;
 	struct proca_task_descr *task_descr = NULL;
 
-	pa_xattr_size = read_xattr(file->f_path.dentry,
-				XATTR_NAME_PA, &pa_xattr_value);
-
-	if (!pa_xattr_value)
+	cert_size = proca_get_certificate(file, &cert_buff);
+	if (!cert_buff)
 		return NULL;
 
-	if (parse_proca_certificate(pa_xattr_value, pa_xattr_size,
+	if (parse_proca_certificate(cert_buff, cert_size,
 				    &parsed_cert))
-		goto pa_xattr_cleanup;
+		goto cert_buff_cleanup;
 
 	if (!is_certificate_relevant_to_task(&parsed_cert, task))
 		goto proca_cert_cleanup;
 
-	PROCA_DEBUG_LOG("%s xattr was found for task %d\n", XATTR_NAME_PA,
+	PROCA_DEBUG_LOG("PROCA certificate was found for task %d\n",
 			task->pid);
 
 	if (!is_certificate_relevant_to_file(&parsed_cert, file)) {
@@ -144,7 +108,7 @@ static struct proca_task_descr *prepare_proca_task_descr(
 	}
 
 	if (init_proca_identity(&ident, file,
-			pa_xattr_value, pa_xattr_size,
+			&cert_buff, cert_size,
 			&parsed_cert))
 		goto proca_cert_cleanup;
 
@@ -160,8 +124,8 @@ proca_identity_cleanup:;
 proca_cert_cleanup:;
 	deinit_proca_certificate(&parsed_cert);
 
-pa_xattr_cleanup:;
-	kfree(pa_xattr_value);
+cert_buff_cleanup:;
+	kfree(cert_buff);
 
 	return NULL;
 }
@@ -194,8 +158,8 @@ static struct file *get_real_file(struct file *file)
 
 static void proca_hook_file_processed(struct task_struct *task,
 				enum task_integrity_value tint_value,
-				struct file *file, void *xattr,
-				size_t xattr_size, int result)
+				struct file *file, void *cert,
+				size_t cert_size, int result)
 {
 	struct proca_task_descr *target_task_descr = NULL;
 
@@ -230,8 +194,8 @@ static void proca_hook_file_processed(struct task_struct *task,
 
 static void proca_hook_file_signed(struct task_struct *task,
 				enum task_integrity_value tint_value,
-				struct file *file, void *xattr,
-				size_t xattr_size, int result)
+				struct file *file, void *cert,
+				size_t cert_size, int result)
 {
 	return;
 }
@@ -240,8 +204,6 @@ static void proca_hook_file_skipped(struct task_struct *task,
 				enum task_integrity_value tint_value,
 				struct file *file)
 {
-	struct dentry *dentry;
-
 	if (!task || !file)
 		return;
 
@@ -249,10 +211,8 @@ static void proca_hook_file_skipped(struct task_struct *task,
 	if (!file)
 		return;
 
-	dentry = file->f_path.dentry;
+	if (proca_is_certificate_present(file)) {
 
-	if (__vfs_getxattr(dentry, dentry->d_inode, XATTR_NAME_PA,
-				NULL, 0, XATTR_NOSECURITY) > 0) {
 		// Workaround for Android applications.
 		// If file has user.pa - check it.
 		five_file_verify(task, file);
@@ -398,6 +358,10 @@ static __init int proca_module_init(void)
 		return ret;
 
 	proca_table_init(&g_proca_table);
+
+	ret = init_proca_storage();
+	if (ret)
+		return ret;
 
 	security_add_hooks(proca_ops, ARRAY_SIZE(proca_ops), "proca_lsm");
 	five_add_hooks(five_ops, ARRAY_SIZE(five_ops));

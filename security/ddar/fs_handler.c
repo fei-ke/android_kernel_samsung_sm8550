@@ -174,11 +174,15 @@ static int __recver(struct sk_buff *skb, struct nlmsghdr *nlh)
 		result_t *result = (result_t *) data;
 		sdp_fs_handler_request_t *req = NULL;
 
+		if (skb->len < (NLMSG_HDRLEN + sizeof(result_t))) {
+			SDP_FS_HANDLER_LOGE("crypto result :: length error!\n");
+			break;
+		}
+
 		printk("result : req_id[%d], opcode[%d] ret[%d]\n", result->request_id,
 				result->opcode, result->ret);
 		spin_lock(&g_sdp_fs_handler_control.lock);
 		req = request_find(&g_sdp_fs_handler_control, result->request_id);
-		spin_unlock(&g_sdp_fs_handler_control.lock);
 
 		if (req == NULL) {
 			SDP_FS_HANDLER_LOGE(
@@ -194,6 +198,7 @@ static int __recver(struct sk_buff *skb, struct nlmsghdr *nlh)
 			memset(result, 0, sizeof(result_t));
 			request_free(req);
 		}
+		spin_unlock(&g_sdp_fs_handler_control.lock);
 		break;
 	}
 	default:

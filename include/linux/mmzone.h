@@ -583,6 +583,11 @@ struct per_cpu_pages {
 	struct list_head lists[NR_PCP_LISTS];
 };
 
+struct per_cpu_pages_ext {
+	spinlock_t lock;	/* Protects pcp.lists field */
+	struct per_cpu_pages pcp;
+};
+
 struct per_cpu_zonestat {
 #ifdef CONFIG_SMP
 	s8 vm_stat_diff[NR_VM_ZONE_STAT_ITEMS];

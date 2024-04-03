@@ -4438,6 +4438,27 @@ static int can_idmap_mount(const struct mount_kattr *kattr, struct mount *mnt)
 	return 0;
 }
 
+/**
+ * mnt_allow_writers() - check whether the attribute change allows writers
+ * @kattr: the new mount attributes
+ * @mnt: the mount to which @kattr will be applied
+ *
+ * Check whether thew new mount attributes in @kattr allow concurrent writers.
+ *
+ * Return: true if writers need to be held, false if not
+ */
+static inline bool mnt_allow_writers(const struct mount_kattr *kattr,
+                     const struct mount *mnt)
+{
+	return (!(kattr->attr_set & MNT_READONLY) ||
+#ifdef CONFIG_KDP_NS
+		(((struct kdp_mount *)mnt)->mnt->mnt_flags & MNT_READONLY)) &&
+#else
+		(mnt->mnt.mnt_flags & MNT_READONLY)) &&
+#endif
+		!kattr->mnt_userns;
+}
+
 static struct mount *mount_setattr_prepare(struct mount_kattr *kattr,
 					   struct mount *mnt, int *err)
 {
@@ -4472,12 +4493,7 @@ static struct mount *mount_setattr_prepare(struct mount_kattr *kattr,
 
 		last = m;
 
-		if ((kattr->attr_set & MNT_READONLY) &&
-#ifdef CONFIG_KDP_NS
-		    !(((struct kdp_mount *)m)->mnt->mnt_flags & MNT_READONLY)) {
-#else
-		    !(m->mnt.mnt_flags & MNT_READONLY)) {
-#endif
+		if (!mnt_allow_writers(kattr, m)) {
 			*err = mnt_hold_writers(m);
 			if (*err)
 				goto out;
@@ -4542,16 +4558,11 @@ static void mount_setattr_commit(struct mount_kattr *kattr,
 #endif
 		}
 
-		/*
-		 * We either set MNT_READONLY above so make it visible
-		 * before ~MNT_WRITE_HOLD or we failed to recursively
-		 * apply mount options.
-		 */
-		if ((kattr->attr_set & MNT_READONLY) &&
+		/* If we had to hold writers unblock them. */
 #ifdef CONFIG_KDP_NS
-		    (((struct kdp_mount*)m)->mnt->mnt_flags & MNT_WRITE_HOLD))
+		if (((struct kdp_mount*)m)->mnt->mnt_flags & MNT_WRITE_HOLD)
 #else
-		    (m->mnt.mnt_flags & MNT_WRITE_HOLD))
+		if (m->mnt.mnt_flags & MNT_WRITE_HOLD)
 #endif
 			mnt_unhold_writers(m);
 
@@ -4610,9 +4621,9 @@ static int do_mount_setattr(struct path *path, struct mount_kattr *kattr)
 	unlock_mount_hash();
 
 	if (kattr->propagation) {
-		namespace_unlock();
 		if (err)
 			cleanup_group_ids(mnt, NULL);
+		namespace_unlock();
 	}
 
 	return err;

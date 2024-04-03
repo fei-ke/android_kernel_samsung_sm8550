@@ -18,10 +18,12 @@ static void proca_table_get_by_task_test(struct kunit *test)
 	DECLARE_NEW(test, struct proca_task_descr, descr_put);
 	DECLARE_NEW(test, struct proca_task_descr, descr_get);
 	DECLARE_NEW(test, struct file, p_file);
+	DECLARE_NEW(test, char, cert_val);
 	struct proca_certificate parsed_cert;
 	int rc;
 
 	descr_put->task = current;
+	memcpy(cert_val, "test", sizeof("test"));
 
 	rc = init_certificate_validation_hash();
 	KUNIT_EXPECT_EQ(test, rc, 0);
@@ -30,7 +32,7 @@ static void proca_table_get_by_task_test(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, rc, 0);
 
 	rc = init_proca_identity(&descr_put->proca_identity, p_file,
-				 "test", sizeof("test"), &parsed_cert);
+				 &cert_val, sizeof(cert_val), &parsed_cert);
 	KUNIT_EXPECT_EQ(test, rc, 0);
 
 	proca_table_init(pt);

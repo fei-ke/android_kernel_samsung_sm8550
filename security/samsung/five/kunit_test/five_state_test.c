@@ -555,7 +555,7 @@ static void five_state_proceed_set_next_state_returns_intg_none_test(
 	file_result->iint = iint;
 	file_result->fn = MMAP_CHECK;
 	file_result->task = NEW(test, struct task_struct);
-	strncpy(file_result->task->comm, comm, TASK_COMM_LEN);
+	memcpy(file_result->task->comm, comm, TASK_COMM_LEN);
 	file_result->file = NEW(test, struct file);
 	file_result->five_result = FIVE_RESULT;
 

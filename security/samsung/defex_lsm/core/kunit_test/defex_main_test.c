@@ -512,10 +512,6 @@ static void at_same_group_gid_test(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, at_same_group_gid(11010, 11230), 1);
 	/* allow traverse to isolated ranges (gid1 >= 90000) */
 	KUNIT_EXPECT_EQ(test, at_same_group_gid(100000, 0), 1);
-	/* allow LoD process (LoD_base = 0x61A8) */
-	KUNIT_EXPECT_EQ(test, at_same_group_gid(0x61A80010u, 0x61A80100u), 1);
-	/* allow LoD process (LoD_base = 0x61A8) */
-	KUNIT_EXPECT_EQ(test, at_same_group_gid(3003, 0x61A80100u), 1);
 	/* deny test */
 	KUNIT_EXPECT_EQ(test, at_same_group_gid(500, 20000), 0);
 #else
@@ -533,8 +529,6 @@ static void at_same_group_test(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, at_same_group(11010, 11230), 1);
 	/* allow traverse to isolated ranges (uid1 >= 90000) */
 	KUNIT_EXPECT_EQ(test, at_same_group(100000, 0), 1);
-	/* allow LoD process (LoD_base = 0x61A8) */
-	KUNIT_EXPECT_EQ(test, at_same_group(0x61A80010, 0x61A80100), 1);
 	/* deny test */
 	KUNIT_EXPECT_EQ(test, at_same_group(500, 20000), 0);
 #else

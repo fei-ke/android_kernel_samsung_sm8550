@@ -365,7 +365,7 @@ int load_rules_late(int forced_load)
 	static atomic_t load_lock = ATOMIC_INIT(1);
 	const struct rules_file_struct *item;
 	static unsigned long start_time;
-	static unsigned long last_time;
+	static unsigned long last_time = 0;
 	static int load_counter = 0;
 	unsigned long cur_time = get_current_sec();
 
@@ -381,11 +381,11 @@ int load_rules_late(int forced_load)
 	if (!start_time)
 		start_time = cur_time;
 	/* Skip this try, wait for next second */
-	if (!forced_load && (cur_time == last_time))
+	if (!forced_load && (cur_time - last_time) < 5)
 		goto do_exit;
 	last_time = cur_time;
 	/* Load has been attempted for 20 seconds, give up. */
-	if ((cur_time - start_time) > 20) {
+	if ((cur_time - start_time) > 300) {
 		res = -1;
 		load_flags |= LOAD_FLAG_TIMEOUT;
 		defex_log_warn("Late load timeout. Try counter = %d", load_counter);
@@ -497,7 +497,7 @@ __visible_for_testing int lookup_tree(const char *file_path, int attribute, stru
 	const char *ptr, *next_separator;
 	struct rule_item_struct *base, *cur_item = NULL;
 	char *base_start;
-	int l, is_system, forced_load;
+	int l, is_system, forced_load = 0;
 	const int is_recovery = !!(load_flags & LOAD_FLAG_RECOVERY);
 	const unsigned int load_both_mask = (LOAD_FLAG_DPOLICY | LOAD_FLAG_DPOLICY_SYSTEM);
 	int iterator = 0;
@@ -508,18 +508,16 @@ __visible_for_testing int lookup_tree(const char *file_path, int attribute, stru
 	is_system = ((strncmp("/system/", file_path, 8) == 0) ||
 			(strncmp("/product/", file_path, 9) == 0) ||
 			(strncmp("/apex/", file_path, 6) == 0) ||
-			(strncmp("/system_ext/", file_path, 12) == 0))?1:0;
-
-	forced_load = is_system &&
-			(attribute == feature_safeplace_path ||
-			 attribute == feature_umhbin_path);
+			(strncmp("/system_ext/", file_path, 12) == 0) ||
+			(strncmp("/postinstall/system/", file_path, 20) == 0)) ? 1 : 0;
 
 	if ((load_flags & load_both_mask) != load_both_mask &&
 			!(load_flags & LOAD_FLAG_TIMEOUT)) {
 		/* allow all requests if rules were not loaded for Recovery mode */
 		if (!load_rules_late(forced_load) || is_recovery)
 			return (attribute == feature_ped_exception ||
-					attribute == feature_safeplace_path)?1:0;
+				attribute == feature_umhbin_path ||
+				attribute == feature_safeplace_path) ? 1 : 0;
 	}
 
 try_not_system:

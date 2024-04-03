@@ -426,7 +426,8 @@ int load_file_list(const char *name)
 				!strncmp(str, "/data/", 6) ||
 #endif
 				!strncmp(str, "/apex/", 6) ||
-				!strncmp(str, "/system_ext/", 12))) {
+				!strncmp(str, "/system_ext/", 12) ||
+				!strncmp(str, "/postinstall/", 13))) {
 			remove_substr(str, "/root/");
 			found = remove_substr(str, "/recovery/");
 			file_list_count++;
@@ -768,7 +769,7 @@ static int defex_show_structure(void *packed_rules, int rules_size)
 	if (global_data_size < first_item_size)
 		printf("WARNING: Too short data size, possible structure error!\n");
 
-	if (defex_packed_rules->size != sizeof(header_name))
+	if ((int)(defex_packed_rules->size) != sizeof(header_name))
 		printf("WARNING: incorrect size field (%d), possible structure error!\n",
 			(int)defex_packed_rules->size);
 
@@ -779,7 +780,9 @@ static int defex_show_structure(void *packed_rules, int rules_size)
 	printf("File List:\n");
 	offset = defex_packed_rules->next_level;
 	base = (offset)?GET_ITEM_PTR(offset, defex_packed_rules):NULL;
-	if (!base) {
+
+	if ((long unsigned int)base < (long unsigned int)packed_rules ||
+			(long unsigned int)base > (long unsigned int)base + rules_size) {
 		printf("- empty list\n");
 		return 0;
 	} else if (check_array_size(base)) {
@@ -821,7 +824,7 @@ static int parse_packed_bin_file(const char *source_bin_file)
 		goto exit;
 	}
 
-	if ((fread(policy_data, policy_size, 1, policy_file)) == -1) {
+	if ((fread(policy_data, policy_size, 1, policy_file)) != 1) {
 		perror("Error");
 		goto exit;
 	}

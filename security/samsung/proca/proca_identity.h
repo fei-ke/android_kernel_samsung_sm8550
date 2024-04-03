@@ -31,8 +31,8 @@ struct proca_identity {
 
 int init_proca_identity(struct proca_identity *identity,
 			struct file *file,
-			char *xattr_value,
-			const size_t xattr_size,
+			char **cert_value,
+			const size_t cert_size,
 			struct proca_certificate *parsed_cert);
 
 void deinit_proca_identity(struct proca_identity *identity);

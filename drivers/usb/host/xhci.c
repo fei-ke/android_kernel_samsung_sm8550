@@ -9,6 +9,9 @@
  */
 
 #include <linux/pci.h>
+#ifndef __GENKSYMS__	/* ANDROID: KABI CRC preservation hack */
+#include <linux/iommu.h>
+#endif
 #include <linux/iopoll.h>
 #include <linux/irq.h>
 #include <linux/log2.h>
@@ -17,6 +20,7 @@
 #include <linux/slab.h>
 #include <linux/dmi.h>
 #include <linux/dma-mapping.h>
+#include <trace/hooks/usb.h>
 
 #include "xhci.h"
 #include "xhci-trace.h"
@@ -223,6 +227,7 @@ int xhci_reset(struct xhci_hcd *xhci, u64 timeout_us)
 static void xhci_zero_64b_regs(struct xhci_hcd *xhci)
 {
 	struct device *dev = xhci_to_hcd(xhci)->self.sysdev;
+	struct iommu_domain *domain;
 	int err, i;
 	u64 val;
 	u32 intrs;
@@ -241,7 +246,9 @@ static void xhci_zero_64b_regs(struct xhci_hcd *xhci)
 	 * an iommu. Doing anything when there is no iommu is definitely
 	 * unsafe...
 	 */
-	if (!(xhci->quirks & XHCI_ZERO_64B_REGS) || !device_iommu_mapped(dev))
+	domain = iommu_get_domain_for_dev(dev);
+	if (!(xhci->quirks & XHCI_ZERO_64B_REGS) || !domain ||
+	    domain->type == IOMMU_DOMAIN_IDENTITY)
 		return;
 
 	xhci_info(xhci, "Zeroing 64bit base registers, expecting fault\n");
@@ -622,10 +629,10 @@ static int xhci_run_finished(struct xhci_hcd *xhci)
 	xhci_dbg_trace(xhci, trace_xhci_dbg_init, "Enable primary interrupter");
 	temp = readl(&xhci->ir_set->irq_pending);
 	writel(ER_IRQ_ENABLE(temp), &xhci->ir_set->irq_pending);
-	
+
 	if (xhci_start(xhci)) {
 		xhci_halt(xhci);
-		spin_unlock_irqrestore(&xhci->lock, flags);		
+		spin_unlock_irqrestore(&xhci->lock, flags);
 		return -ENODEV;
 	}
 
@@ -639,7 +646,7 @@ static int xhci_run_finished(struct xhci_hcd *xhci)
 			"Finished xhci_run for USB3 roothub");
 
 	spin_unlock_irqrestore(&xhci->lock, flags);
-			
+
 	return 0;
 }
 
@@ -1198,7 +1205,7 @@ int xhci_resume(struct xhci_hcd *xhci, bool hibernated)
 		xhci_dbg(xhci, "Stop HCD\n");
 		xhci_halt(xhci);
 		xhci_zero_64b_regs(xhci);
-		retval = xhci_reset(xhci, XHCI_RESET_LONG_USEC);
+		retval = xhci_reset(xhci, XHCI_RESET_SHORT_USEC);
 		spin_unlock_irq(&xhci->lock);
 		if (retval)
 			return retval;
@@ -1412,6 +1419,11 @@ static void xhci_unmap_temp_buf(struct usb_hcd *hcd, struct urb *urb)
 	urb->transfer_flags &= ~URB_DMA_MAP_SINGLE;
 	kfree(urb->transfer_buffer);
 	urb->transfer_buffer = NULL;
+}
+
+void _trace_android_vh_xhci_urb_suitable_bypass(struct urb *urb, int *ret)
+{
+	trace_android_vh_xhci_urb_suitable_bypass(urb, ret);
 }
 
 /*

@@ -244,7 +244,9 @@ const char *five_d_path(const struct path *path, char **pathbuf, char *namebuf)
 			*pathbuf = NULL;
 			pathname = NULL;
 		}
-		fix_dpath(path, *pathbuf, pathname);
+		else {
+			fix_dpath(path, *pathbuf, pathname);
+		}
 	}
 
 	if (!pathname) {

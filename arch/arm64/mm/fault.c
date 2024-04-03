@@ -45,6 +45,7 @@
 #include <asm/virt.h>
 
 #include <trace/hooks/fault.h>
+#include <trace/hooks/mm.h>
 
 struct fault_info {
 	int	(*fn)(unsigned long far, unsigned int esr,
@@ -486,8 +487,8 @@ static void do_bad_area(unsigned long far, unsigned int esr,
 	}
 }
 
-#define VM_FAULT_BADMAP		0x010000
-#define VM_FAULT_BADACCESS	0x020000
+#define VM_FAULT_BADMAP		((__force vm_fault_t)0x010000)
+#define VM_FAULT_BADACCESS	((__force vm_fault_t)0x020000)
 
 static vm_fault_t __do_page_fault(struct mm_struct *mm, unsigned long addr,
 				  unsigned int mm_flags, unsigned long vm_flags,
@@ -1013,6 +1014,8 @@ struct page *alloc_zeroed_user_highpage_movable(struct vm_area_struct *vma,
 {
 	gfp_t flags = GFP_HIGHUSER_MOVABLE | __GFP_ZERO | __GFP_CMA;
 
+	trace_android_vh_alloc_highpage_movable_gfp_adjust(&flags);
+	trace_android_vh_anon_gfp_adjust(&flags);
 	/*
 	 * If the page is mapped with PROT_MTE, initialise the tags at the
 	 * point of allocation and page zeroing as this is usually faster than

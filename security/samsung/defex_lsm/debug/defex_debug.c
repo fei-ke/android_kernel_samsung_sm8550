@@ -176,7 +176,7 @@ void blob(const char *title, const char *buffer, const size_t bufLen, const int 
 {
 	size_t i = 0, line;
 	size_t j = 0, len = bufLen;
-	int offset = 0;
+	int offset;
 	char c, stringToPrint[MAX_DATA_LEN];
 
 	defex_log_blob("%s", title);
@@ -205,7 +205,7 @@ void blob(const char *title, const char *buffer, const size_t bufLen, const int 
 				offset += snprintf(stringToPrint + offset, MAX_DATA_LEN - offset, " ");
 		}
 
-		offset += snprintf(stringToPrint + offset, MAX_DATA_LEN - offset, " |");
+		snprintf(stringToPrint + offset, MAX_DATA_LEN - offset, " |");
 		defex_log_blob("%s", stringToPrint);
 		memset(stringToPrint, 0, MAX_DATA_LEN);
 		i += line;

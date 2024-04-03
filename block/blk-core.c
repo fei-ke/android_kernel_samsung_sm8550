@@ -44,6 +44,8 @@
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/block.h>
+#undef CREATE_TRACE_POINTS
+#include <trace/hooks/block.h>
 
 #include "blk.h"
 #include "blk-mq.h"
@@ -61,6 +63,11 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(block_bio_complete);
 EXPORT_TRACEPOINT_SYMBOL_GPL(block_split);
 EXPORT_TRACEPOINT_SYMBOL_GPL(block_unplug);
 EXPORT_TRACEPOINT_SYMBOL_GPL(block_rq_insert);
+EXPORT_TRACEPOINT_SYMBOL_GPL(block_bio_queue);
+EXPORT_TRACEPOINT_SYMBOL_GPL(block_getrq);
+EXPORT_TRACEPOINT_SYMBOL_GPL(block_rq_issue);
+EXPORT_TRACEPOINT_SYMBOL_GPL(block_rq_merge);
+EXPORT_TRACEPOINT_SYMBOL_GPL(block_rq_requeue);
 EXPORT_TRACEPOINT_SYMBOL_GPL(block_rq_complete);
 
 DEFINE_IDA(blk_queue_ida);
@@ -1261,6 +1268,7 @@ void blk_account_io_done(struct request *req, u64 now)
 	 * normal IO on queueing nor completion.  Accounting the
 	 * containing request is enough.
 	 */
+	trace_android_vh_blk_account_io_done(req);
 	if (req->part && blk_do_io_stat(req) &&
 	    !(req->rq_flags & RQF_FLUSH_SEQ)) {
 		const int sgrp = op_stat_group(req_op(req));

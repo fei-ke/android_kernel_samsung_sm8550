@@ -1,5 +1,6 @@
 ccflags-y += -I$(srctree) \
              -I$(srctree)/security/samsung/proca \
+             -I$(srctree)/security/samsung/five/kunit_test \
              -DPROCA_KUNIT_ENABLED
 
 KBUILD_CFLAGS := $(subst -Werror=strict-prototypes,,$(KBUILD_CFLAGS))

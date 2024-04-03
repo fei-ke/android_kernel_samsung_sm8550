@@ -38,6 +38,7 @@ DEFINE_FUNCTION_MOCK(
 	METHOD(call_crc16), RETURNS(u16), PARAMS(u16, u8 const *, size_t));
 
 static char comm[TASK_COMM_LEN];
+static char comm_2[TASK_COMM_LEN];
 static int result;
 static char dsms_msg[MESSAGE_BUFFER_SIZE];
 
@@ -54,9 +55,13 @@ static void init_param(int comm_offs, int res, char *comm, int *p_result)
 {
 	int i;
 	*p_result = res;  // randomly init result
-	for (i = 0; i < TASK_COMM_LEN-1; ++i)  // randomly init char message
+	for (i = 0; i < TASK_COMM_LEN-1; ++i) // randomly init char message
+	{
 		comm[i] = (char)(comm_offs + i);
+		comm_2[i] = (char)(comm_offs + 2*i);
+	}
 	comm[TASK_COMM_LEN-1] = '\0';
+	comm_2[TASK_COMM_LEN-1] = '\0';
 }
 
 static void five_dsms_sign_err_first0_test(struct kunit *test)
@@ -199,7 +204,7 @@ static void five_dsms_reset_integrity_two_same_msg_test(struct kunit *test)
 		int_eq(test, 0), any(test), int_lt(test, MESSAGE_BUFFER_SIZE))),
 		u32_return(test, CRC_VALUE_NO_MATTER + 3)));
 	five_dsms_reset_integrity(comm, result, file_name);
-	five_dsms_reset_integrity(comm, result, file_name);
+	five_dsms_reset_integrity(comm_2, result, file_name);
 }
 
 static void five_dsms_reset_integrity_large_filename_test(struct kunit *test)

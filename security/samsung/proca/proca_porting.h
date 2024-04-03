@@ -24,6 +24,9 @@
 #include <linux/mm.h>
 #include <linux/rcupdate.h>
 #include <linux/atomic.h>
+#ifdef PROCA_KUNIT_ENABLED
+#include "asm-generic/io.h"
+#endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0)
 
@@ -207,6 +210,54 @@ static inline struct file *get_task_exe_file(struct task_struct *task)
 #define XATTR_NOSECURITY 0x4	/* get value, do not involve security check */
 #define __vfs_getxattr(dentry, inode, name, value, size, flags) \
 		__vfs_getxattr(dentry, inode, name, value, size)
+#endif
+
+/*
+ * BASE64 lib appears since kernel v6.0
+ */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 0, 0)
+
+#define BASE64_CHARS(nbytes)   DIV_ROUND_UP(nbytes, 3) * 4
+
+static const char base64_table[65] =
+	"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+static inline int base64_encode(const u8 *src, int srclen, char *dst)
+{
+	u32 ac = 0;
+	int bits = 0;
+	int i;
+	char *cp = dst;
+
+	for (i = 0; i < srclen; i++) {
+		ac = (ac << 8) | src[i];
+		bits += 8;
+		do {
+			bits -= 6;
+			*cp++ = base64_table[(ac >> bits) & 0x3f];
+		} while (bits >= 6);
+	}
+	if (bits) {
+		*cp++ = base64_table[(ac << (6 - bits)) & 0x3f];
+		bits -= 6;
+	}
+	while (bits < 0) {
+		*cp++ = '=';
+		bits += 2;
+	}
+	return cp - dst;
+}
+#else
+/*
+ * Note: The BASE64_CHARS macro is incorrect in the original code.
+ * #define BASE64_CHARS(nbytes)   DIV_ROUND_UP((nbytes) * 4, 3)
+ *
+ * It should be defined as follows to correctly calculate the size
+ * of the base64-encoded output buffer, including padding:
+ *
+ */
+#undef BASE64_CHARS
+#define BASE64_CHARS(nbytes)   DIV_ROUND_UP(nbytes, 3) * 4
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0)

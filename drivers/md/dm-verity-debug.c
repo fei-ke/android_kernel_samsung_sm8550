@@ -207,13 +207,13 @@ static void print_block_data(unsigned long long blocknr, unsigned char *data_to_
     char ch;
 
     if (blocknr == 0) {
-        pr_err("printing Hash dump %dbyte, hash_to_dump 0x%p\n", len, (void *)data_to_dump);
+        pr_err("printing Hash dump %dbyte, hash_to_dump 0x%llx\n", len, (unsigned long long)data_to_dump);
     } else {
         pr_err("dm-verity corrupted, printing data in hex\n");
         pr_err(" dump block# : %llu, start offset(byte) : %d\n"
                 , blocknr, start);
-        pr_err(" length(byte) : %d, data_to_dump 0x%p\n"
-                , len, (void *)data_to_dump);
+        pr_err(" length(byte) : %d, data_to_dump 0x%llx\n"
+                , len, (unsigned long long)data_to_dump);
         pr_err("-------------------------------------------------\n");
     }
     for (i = 0; i < (len + 15) / 16; i++) {

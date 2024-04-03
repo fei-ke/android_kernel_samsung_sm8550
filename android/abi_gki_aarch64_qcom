@@ -103,6 +103,7 @@
   blk_get_request
   blk_ksm_get_slot_idx
   blk_ksm_register
+  blk_ksm_reprogram_all_keys
   blk_mark_disk_dead
   blk_mq_alloc_request
   blk_mq_alloc_request_hctx
@@ -148,10 +149,10 @@
   blocking_notifier_chain_register
   blocking_notifier_chain_unregister
   bmap
-  bpf_trace_run1
   bpf_trace_run10
   bpf_trace_run11
   bpf_trace_run12
+  bpf_trace_run1
   bpf_trace_run2
   bpf_trace_run3
   bpf_trace_run4
@@ -426,6 +427,7 @@
   devm_iio_channel_get_all
   devm_iio_device_alloc
   __devm_iio_device_register
+  devm_iio_triggered_buffer_setup_ext
   devm_input_allocate_device
   devm_ioremap
   devm_ioremap_resource
@@ -780,6 +782,9 @@
   geni_se_tx_dma_unprep
   genphy_check_and_restart_aneg
   __genphy_config_aneg
+  genphy_c45_an_config_aneg
+  genphy_c45_check_and_restart_aneg
+  genphy_c45_pma_setup_forced
   genphy_c45_read_status
   genphy_read_abilities
   genphy_read_lpa
@@ -1041,9 +1046,11 @@
   iommu_group_get_iommudata
   iommu_group_put
   iommu_group_ref_get
+  iommu_group_remove_device
   iommu_group_set_iommudata
   iommu_iova_to_phys
   iommu_map
+  iommu_map_atomic
   iommu_map_sg
   iommu_present
   iommu_put_dma_cookie
@@ -1281,8 +1288,8 @@
   mempool_kmalloc
   memremap
   mem_section
-  memset
   memset64
+  memset
   __memset_io
   memstart_addr
   memunmap
@@ -1309,8 +1316,8 @@
   mmc_retune_release
   mmc_select_bus_width
   mmc_select_card
-  mmc_select_hs
   mmc_select_hs400
+  mmc_select_hs
   mmc_select_hs_ddr
   mmc_select_timing
   mmc_send_status
@@ -1343,8 +1350,8 @@
   netdev_rss_key_fill
   netif_receive_skb_list
   nla_find
-  nla_reserve
   nla_reserve_64bit
+  nla_reserve
   __nla_validate
   no_llseek
   nonseekable_open
@@ -1455,6 +1462,7 @@
   page_endio
   page_is_ram
   page_mapping
+  page_owner_inited
   page_pool_alloc_pages
   page_pool_create
   page_pool_destroy
@@ -1584,6 +1592,7 @@
   phy_modify
   phy_modify_changed
   phy_modify_mmd
+  phy_modify_mmd_changed
   phy_modify_paged
   phy_modify_paged_changed
   phy_power_off
@@ -1594,6 +1603,7 @@
   phy_restore_page
   phy_save_page
   phy_select_page
+  phy_set_max_speed
   phy_set_mode_ext
   phy_sfp_attach
   phy_sfp_detach
@@ -1845,6 +1855,13 @@
   regulator_set_mode
   regulator_set_voltage
   regulator_unregister_notifier
+  relay_close
+  relay_file_operations
+  relay_flush
+  relay_open
+  relay_reset
+  relay_subbufs_consumed
+  relay_switch_subbuf
   release_firmware
   __release_region
   release_sock
@@ -1897,6 +1914,7 @@
   rproc_put
   rproc_remove_subdev
   rproc_report_crash
+  rproc_set_firmware
   rproc_shutdown
   rtc_time64_to_tm
   rtc_tm_to_time64
@@ -1975,6 +1993,7 @@
   set_next_entity
   set_normalized_timespec64
   __SetPageMovable
+  __set_page_owner
   set_task_cpu
   set_user_nice
   sg_alloc_table
@@ -2316,6 +2335,7 @@
   __traceiter_android_vh_ufs_check_int_errors
   __traceiter_android_vh_ufs_clock_scaling
   __traceiter_android_vh_ufs_compl_command
+  __traceiter_android_vh_ufs_prepare_command
   __traceiter_android_vh_ufs_send_command
   __traceiter_android_vh_ufs_send_tm_command
   __traceiter_android_vh_ufs_send_uic_command
@@ -2438,6 +2458,7 @@
   __tracepoint_android_vh_ufs_check_int_errors
   __tracepoint_android_vh_ufs_clock_scaling
   __tracepoint_android_vh_ufs_compl_command
+  __tracepoint_android_vh_ufs_prepare_command
   __tracepoint_android_vh_ufs_send_command
   __tracepoint_android_vh_ufs_send_tm_command
   __tracepoint_android_vh_ufs_send_uic_command
@@ -2481,6 +2502,7 @@
   typec_set_pwr_opmode
   typec_set_pwr_role
   typec_unregister_partner
+  typec_get_orientation
   uart_add_one_port
   uart_get_baud_rate
   uart_insert_char

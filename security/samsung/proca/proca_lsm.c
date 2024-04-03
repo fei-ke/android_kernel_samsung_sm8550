@@ -203,7 +203,7 @@ static struct proca_task_descr *prepare_proca_task_descr(
 	}
 
 	if (init_proca_identity(&ident, file,
-			pa_xattr_value, pa_xattr_size,
+			&pa_xattr_value, pa_xattr_size,
 			&parsed_cert))
 		goto proca_cert_cleanup;
 
