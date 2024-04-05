@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #
-# Tested on Ubuntu 20.04
+# Tested on Ubuntu 22.04
 #
 # 1. Install Clang/LLVM
 #
