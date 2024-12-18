@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 
+#if defined(CONFIG_TRACEPOINTS) && defined(CONFIG_ANDROID_VENDOR_HOOKS)
+
 #include <linux/kernel.h>
 #include <linux/mm.h>
 
@@ -32,3 +34,7 @@ void dma_heap_trace_init(void)
 	register_trace_android_vh_show_mem(dma_heap_pool_show_mem, NULL);
 	register_trace_android_vh_meminfo_proc_show(dma_heap_pool_meminfo, NULL);
 }
+
+#else /* !CONFIG_TRACEPOINTS || !CONFIG_ANDROID_VENDOR_HOOKS */
+void dma_heap_trace_init(void) {}
+#endif

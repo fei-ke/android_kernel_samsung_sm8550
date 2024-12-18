@@ -92,3 +92,8 @@ void deinit_proca_identity(struct proca_identity *identity)
 		fput(identity->file);
 	kfree(identity->certificate);
 }
+
+#if defined(CONFIG_SEC_KUNIT)
+EXPORT_SYMBOL_GPL(proca_identity_copy);
+EXPORT_SYMBOL_GPL(init_proca_identity);
+#endif

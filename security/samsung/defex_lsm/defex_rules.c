@@ -235,6 +235,8 @@
 	{feature_safeplace_path,"/system/bin/bpfloader"},
 	{feature_safeplace_path,"/system/bin/btfloader"},
 	{feature_safeplace_path,"/vendor/bin/system_dlkm_modprobe.sh"},
+	{feature_safeplace_path,"/apex/com.android.sdkext/bin/derive_classpath"},
+	{feature_safeplace_path,"/apex/com.android.sdkext@340819010.tmp/bin/derive_classpath"},
 	{feature_safeplace_path,"/tmp/update_binary;updater_intermediates/updater;obj/EXECUTABLES"},
 	{feature_safeplace_path,"/tmp/update-binary"},
 	{feature_safeplace_path,"/system/bin/install-recovery.sh"},	/* DEFAULT */

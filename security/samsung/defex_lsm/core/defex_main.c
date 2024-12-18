@@ -440,7 +440,7 @@ __visible_for_testing int task_defex_trusted_map(struct defex_context *dc, va_li
 	int ret = DEFEX_ALLOW, argc;
 	struct linux_binprm *bprm;
 
-	if (!CHECK_ROOT_CREDS(&dc->cred))
+	if (!CHECK_ROOT_CREDS(dc->cred))
 		goto out;
 
 	bprm = va_arg(ap, struct linux_binprm *);

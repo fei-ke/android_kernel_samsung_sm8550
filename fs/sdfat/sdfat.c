@@ -2647,13 +2647,19 @@ static struct dentry *__sdfat_lookup(struct inode *dir, struct dentry *dentry)
 
 	i_mode = inode->i_mode;
 	if (S_ISLNK(i_mode) && !SDFAT_I(inode)->target) {
-		SDFAT_I(inode)->target = kmalloc((i_size_read(inode)+1), GFP_KERNEL);
+		u64 path_len = i_size_read(inode);
+
+		if (path_len >= PATH_MAX)
+			path_len = PATH_MAX - 1;
+
+		SDFAT_I(inode)->target = kmalloc((path_len + 1), GFP_NOFS);
 		if (!SDFAT_I(inode)->target) {
 			err = -ENOMEM;
+			iput(inode);
 			goto error;
 		}
-		fsapi_read_link(dir, &fid, SDFAT_I(inode)->target, i_size_read(inode), &ret);
-		*(SDFAT_I(inode)->target + i_size_read(inode)) = '\0';
+		fsapi_read_link(dir, &fid, SDFAT_I(inode)->target, path_len, &ret);
+		*(SDFAT_I(inode)->target + path_len) = '\0';
 	}
 
 	alias = d_find_alias(inode);
@@ -2802,7 +2808,7 @@ static int __sdfat_symlink(struct inode *dir, struct dentry *dentry,
 	inode->i_mtime = inode->i_atime = inode->i_ctime = ts;
 	/* timestamp is already written, so mark_inode_dirty() is unneeded. */
 
-	SDFAT_I(inode)->target = kmalloc((len+1), GFP_KERNEL);
+	SDFAT_I(inode)->target = kmalloc((len+1), GFP_NOFS);
 	if (!SDFAT_I(inode)->target) {
 		err = -ENOMEM;
 		goto out;
@@ -4182,6 +4188,12 @@ static int sdfat_fill_inode(struct inode *inode, const FILE_ID_T *fid)
 		return -EIO;
 	}
 
+	/* symlink option check */
+	if (!sbi->options.symlink) {
+		info.Attr &= ~(ATTR_SYMLINK);
+		SDFAT_I(inode)->fid.attr &= ~(ATTR_SYMLINK);
+	}
+
 	if (info.Attr & ATTR_SUBDIR) { /* directory */
 		inode->i_generation &= ~1;
 		inode->i_mode = sdfat_make_mode(sbi, info.Attr, S_IRWXUGO);
@@ -4389,11 +4401,14 @@ static void sdfat_free_sb_info(struct sdfat_sb_info *sbi)
 		sbi->options.iocharset = sdfat_default_iocharset;
 	}
 
-	if (sbi->use_vmalloc) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
+	kvfree(sbi);
+#else
+	if (!sbi->use_vmalloc)
+		kfree(sbi);
+	else
 		vfree(sbi);
-		return;
-	}
-	kfree(sbi);
+#endif
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
@@ -4663,8 +4678,12 @@ static int __sdfat_show_options(struct seq_file *m, struct super_block *sb)
 	if (sbi->fsi.vol_type != EXFAT)
 		seq_puts(m, ",shortname=winnt");
 	seq_printf(m, ",namecase=%u", opts->casesensitive);
-	if (opts->tz_utc)
-		seq_puts(m, ",tz=UTC");
+	if (opts->tz_set) {
+		if (opts->time_offset)
+			seq_printf(m, ",time_offset=%d", opts->time_offset);
+		else
+			seq_puts(m, ",tz=UTC");
+	}
 	if (opts->improved_allocation & SDFAT_ALLOC_DELAY)
 		seq_puts(m, ",delay");
 	if (opts->improved_allocation & SDFAT_ALLOC_SMART)
@@ -4865,6 +4884,7 @@ enum {
 	Opt_codepage,
 	Opt_charset,
 	Opt_utf8,
+	Opt_time_offset,
 	Opt_namecase,
 	Opt_tz_utc,
 	Opt_adj_hidsect,
@@ -4896,6 +4916,7 @@ static const match_table_t sdfat_tokens = {
 	{Opt_utf8, "utf8"},
 	{Opt_namecase, "namecase=%u"},
 	{Opt_tz_utc, "tz=UTC"},
+	{Opt_time_offset, "time_offset=%d"},
 	{Opt_adj_hidsect, "adj_hid"},
 	{Opt_delay, "delay"},
 	{Opt_smart, "smart"},
@@ -4950,7 +4971,8 @@ static int parse_options(struct super_block *sb, char *options, int silent,
 	opts->casesensitive = 0;
 	opts->utf8 = 0;
 	opts->adj_hidsect = 0;
-	opts->tz_utc = 0;
+	opts->tz_set = 0;
+	opts->time_offset = 0;
 	opts->improved_allocation = 0;
 	opts->amap_opt.pack_ratio = 0;	// Default packing
 	opts->amap_opt.sect_per_au = 0;
@@ -5020,7 +5042,21 @@ static int parse_options(struct super_block *sb, char *options, int silent,
 			opts->adj_hidsect = 1;
 			break;
 		case Opt_tz_utc:
-			opts->tz_utc = 1;
+			opts->tz_set = 1;
+			opts->time_offset = 0;
+			break;
+		case Opt_time_offset:
+			if (match_int(&args[0], &option))
+				return -EINVAL;
+			/*
+			 * GMT+-12 zones may have DST corrections so at least
+			 * 13 hours difference is needed. Make the limit 24
+			 * just in case someone invents something unusual.
+			 */
+			if (option < -24 * 60 || option > 24 * 60)
+				return -EINVAL;
+			opts->tz_set = 1;
+			opts->time_offset = option;
 			break;
 		case Opt_symlink:
 			if (match_int(&args[0], &option))
@@ -5216,6 +5252,13 @@ static int sdfat_fill_super(struct super_block *sb, void *data, int silent)
 	 * the filesystem, since we're only just about to mount
 	 * it and have no inodes etc active!
 	 */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
+	sbi = kvzalloc(sizeof(struct sdfat_sb_info), GFP_KERNEL);
+	if (!sbi) {
+		sdfat_log_msg(sb, KERN_ERR, "failed to mount! (ENOMEM)");
+		return -ENOMEM;
+	}
+#else
 	sbi = kzalloc(sizeof(struct sdfat_sb_info), GFP_KERNEL);
 	if (!sbi) {
 		sdfat_log_msg(sb, KERN_INFO,
@@ -5227,6 +5270,7 @@ static int sdfat_fill_super(struct super_block *sb, void *data, int silent)
 		}
 		sbi->use_vmalloc = 1;
 	}
+#endif
 
 	mutex_init(&sbi->s_vlock);
 	sb->s_fs_info = sbi;
@@ -5355,10 +5399,14 @@ failed_mount:
 	if (sbi->options.iocharset != sdfat_default_iocharset)
 		kfree(sbi->options.iocharset);
 	sb->s_fs_info = NULL;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
+	kvfree(sbi);
+#else
 	if (!sbi->use_vmalloc)
 		kfree(sbi);
 	else
 		vfree(sbi);
+#endif
 	return err;
 }
 

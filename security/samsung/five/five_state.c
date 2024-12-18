@@ -116,6 +116,74 @@ enum task_integrity_reset_cause state_to_reason_cause(
 	return reset_cause;
 }
 
+const char *task_integrity_reset_str(
+		enum task_integrity_reset_cause cause)
+{
+	const char *str = NULL;
+
+	switch (cause) {
+	case CAUSE_TAMPERED:
+		str = "tampered";
+		break;
+	case CAUSE_NO_CERT:
+		str = "nocert";
+		break;
+	case CAUSE_MISMATCH_LABEL:
+		str = "mismatch_label";
+		break;
+	case CAUSE_UNSET:
+		str = "unset";
+		break;
+	case CAUSE_BAD_FS:
+		str = "bad_fs";
+		break;
+	case CAUSE_INVALID_HASH_LENGTH:
+		str = "invalid_hash_len";
+		break;
+	case CAUSE_INVALID_HEADER:
+		str = "invalid_header";
+		break;
+	case CAUSE_CALC_HASH_FAILED:
+		str = "calc_hash_failed";
+		break;
+	case CAUSE_INVALID_LABEL_DATA:
+		str = "invalid_label_data";
+		break;
+	case CAUSE_INVALID_SIGNATURE_DATA:
+		str = "invalid_sign_data";
+		break;
+	case CAUSE_INVALID_HASH:
+		str = "invalid_hash";
+		break;
+	case CAUSE_INVALID_CALC_CERT_HASH:
+		str = "invalid_calc_cert_hash";
+		break;
+	case CAUSE_INVALID_UPDATE_LABEL:
+		str = "invalid_update_label";
+		break;
+	case CAUSE_INVALID_SIGNATURE:
+		str = "invalid_signature";
+		break;
+	case CAUSE_UKNOWN_FIVE_DATA:
+		str = "unknown_five_data";
+		break;
+	case CAUSE_PTRACE:
+		str = "ptrace";
+		break;
+	case CAUSE_VMRW:
+		str = "vmrw";
+		break;
+	case CAUSE_EXEC:
+		str = "exec";
+		break;
+	default:
+		str = "reset_integrity";
+		break;
+	}
+
+	return str;
+}
+
 __visible_for_testing
 int is_system_label(struct integrity_label *label)
 {
@@ -398,3 +466,13 @@ void five_state_proceed(struct task_integrity *integrity,
 	}
 }
 
+#if defined(CONFIG_SEC_KUNIT)
+EXPORT_SYMBOL_GPL(verify_or_update_label);
+EXPORT_SYMBOL_GPL(task_integrity_state_str);
+EXPORT_SYMBOL_GPL(state_to_reason_cause);
+EXPORT_SYMBOL_GPL(set_next_state);
+EXPORT_SYMBOL_GPL(set_first_state);
+EXPORT_SYMBOL_GPL(is_system_label);
+EXPORT_SYMBOL_GPL(integrity_label_cmp);
+EXPORT_SYMBOL_GPL(five_state_proceed);
+#endif

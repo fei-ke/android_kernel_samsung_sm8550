@@ -949,34 +949,578 @@ static u32 seccomp_actions_logged = SECCOMP_LOG_KILL_PROCESS |
 #if defined(CONFIG_SECURITY_DSMS) && defined(CONFIG_SECURITY_KUMIHO)
 #include <linux/dsms.h>
 
-#define MSG_SZ 200
-
-noinline void seccomp_notify_dsms(unsigned long syscall, long signr, u32 action)
+/* append_string_s: append simple string to a buffer
+ * @target: pointer to a string, which is updated on success to
+ *          point to the next available space
+ * @available_size: pointer to count of available bytes in target, including
+ *                  terminator; updated on success
+ * @source: nonnull pointer to text (zero-terminated, unless @source_len > 0)
+ *          to be appended to *target
+ * @source_len: if > 0, exactly the number of bytes in @source which will be
+ *              appended
+ * Returns 0 if *source was completely copied, 1 otherwise (null source,
+ * or not enough space in *target)
+ */
+static int append_string_s(char **target, int *available_size,
+				const char *source, int source_len)
 {
-	char comm_buf[sizeof(current->comm)];
+	if (!source) // sanity check
+		return 1;
+	while (*available_size > 1 && (source_len > 0 || *source)) {
+		*((*target)++) = *source++;
+		--(*available_size);
+		if (source_len > 0)
+			--source_len;
+	}
+	if (*available_size > 0)
+		**target = 0;
+	return *source != 0; // copy terminated prematurely
+}
 
-	get_task_comm(comm_buf, current);
-	if (unlikely(strncmp("kumihodecoder", comm_buf, sizeof(current->comm)) == 0)) {
-		char msg[MSG_SZ];
+/* append_string: append to a buffer message, optionally quoting/escaping
+ * @target: pointer to a string address, which is updated on success to
+ *          point to the next available space
+ * @available_size: pointer to count of available bytes in target, including
+ *                  terminator; updated on success
+ * @source: string to be appended to *target; if @source_length is zero,
+ *          must be zero-terminated
+ * @source_len: if > 0, exactly the number of bytes in @source which will be
+ *              appended
+ * @quote_escape: if true, add open/closing quotes and escapes nongraphic
+ *                characters
+ * Returns 0 if *source was completely copied, 1 otherwise
+ */
+static int append_string(char **target, int *available_size,
+				char *source, int source_length,
+				int quote_escape)
+{
+	if (source_length > 0)
+		source[--source_length] = 0;
+	if (quote_escape) {
+		const char *p;
+
+		if (*available_size < 2)
+			return 1;
+		*((*target)++) = '"';
+		--(*available_size);
+
+		for (p = source; source_length > 0 || *p; ++p) {
+			char ss[5];
+
+			ss[2] = 0;
+			switch (*p) {
+			case '\t':
+				*ss = '\\'; ss[1] = 't'; break;
+			case '\n':
+				*ss = '\\'; ss[1] = 'n'; break;
+			case '\r':
+				*ss = '\\'; ss[1] = 'r'; break;
+			case '\\':
+				*ss = '\\'; ss[1] = '\\'; break;
+			case '"':
+				*ss = '\\'; ss[1] = '"'; break;
+			default:
+				if (*(unsigned char *)p < ' ' ||
+					*(unsigned char *)p > 127) {
+					sprintf(ss, "\\%03o",
+							*(unsigned char *)p);
+				} else { // ordinary character
+					*ss = *p;
+					ss[1] = 0;
+				}
+			}
+			if (append_string_s(target, available_size, ss, 0))
+				return 1;
+			if (source_length > 0)
+				--source_length;
+		}
+		return append_string_s(target, available_size, "\"", 0);
+	}
+	return append_string_s(target, available_size, source, source_length);
+}
+
+/* append_string_f: append formatted data to a buffer message, optionally
+ * quoting/escaping
+ * @target: pointer to a string address, which is updated on success to
+ *          point to the next available space
+ * @available_size: pointer to count of available bytes in target, including
+ *                  terminator; updated on success
+ * @aux_buffer: pointer to an auxiliary buffer, which should be enough for
+ *              holding all formatted arguments
+ * @aux_buffer_size: size of @aux_buffer
+ * @quote_escape: if true, add open/closing quotes and escapes nongraphic
+ *                characters
+ * @format: formatting string, printf-style
+ * All additional arguments are formatted into @aux_buffer
+ * Returns 0 if all arguments were formatted and completely copied, 1 otherwise
+ */
+static int append_string_f(char **target, int *available_size,
+			char *aux_buffer, size_t aux_buffer_size,
+			int quote_escape, const char *format, ...)
+{
+	size_t vsnp_ret;
+	va_list ap;
+
+	va_start(ap, format);
+	vsnp_ret = vsnprintf(aux_buffer, aux_buffer_size, format, ap);
+	va_end(ap);
+	return append_string(target, available_size, aux_buffer, 0,
+			quote_escape) || vsnp_ret >= aux_buffer_size;
+}
+
+/* clone_from_user: returns copy of userspace region, if possibile
+ * @dst: copy destination; if 0, allocate space
+ * @src: userspace address
+ * @size: address of size of region to be copied; will be updated with
+ *        count of effectively copied bytes
+ * @buffer: pointer to a string address, used to record any diagnostic
+ *          messages; will be updated to point to the next available space
+ * @buffer_size: pointer to count of available bytes in @buffer, including
+ *               terminator; updated after use
+ * @task_name: short nonnull tag to identify caller
+ * @ne: pointer to flag, which wil be nonzero if @buffer_size was not
+ *      enough to hold all diagnostic messages
+ * Returns effective destination, 0 if @src was invalid or allocation failed
+ */
+static void *clone_from_user(void *dst, const void *src, size_t *size,
+	char **buffer, int *buffer_size, const char *task_name, int *ne)
+{
+	void *eff_dst;
+	char aux_buffer[100];
+	size_t uncopied_size;
+
+	if (!src) {
+		*ne |= append_string_f(buffer, buffer_size,
+				aux_buffer, sizeof(aux_buffer), 0,
+				" (%s: null src)", task_name);
+		*size = 0;
+		return 0;
+	}
+	if (!dst) {
+		eff_dst = kcalloc(1, *size, GFP_KERNEL);
+		if (!eff_dst) {
+			*ne |= append_string_f(buffer, buffer_size,
+					aux_buffer, sizeof(aux_buffer), 0,
+					" (%s: failed alloc)", task_name);
+			*size = 0;
+			return 0;
+		}
+	} else
+		eff_dst = dst;
+	uncopied_size = copy_from_user(eff_dst, src, *size);
+	if (uncopied_size)
+		*ne |= append_string_f(buffer, buffer_size,
+			aux_buffer, sizeof(aux_buffer), 0,
+			" (%s: copied only %zu of %zu bytes)",
+			task_name, *size - uncopied_size, *size);
+	*size -= uncopied_size;
+	return eff_dst;
+}
+
+/* Descriptor of syscalls for a more user-friendly display */
+struct syscall_api {
+	int nr;  // key: syscall number
+	const char *name;  // user-readable name
+	unsigned char nargs;  // argument count
+	unsigned char arg_str;  // bitmap marking which arguments are text strings
+	int (*dump)(char **buffer, // optional custom formatter
+			int *available_size, const struct seccomp_data *sd);
+// Constants for struct syscall_api.arg_str
+#define AS0 1  // first argument is a string
+#define AS1 (1 << 1)
+#define AS2 (1 << 2)
+#define AS3 (1 << 3)
+#define AS4 (1 << 4)
+#define AS5 (1 << 5)
+};
+
+#include <uapi/linux/un.h> // sockaddr_un
+
+/* Specialized formatter for some kinds of socket address */
+static int dump_sockaddr(char **buffer, int *buffer_size,
+		char *aux_buffer, size_t aux_buffer_size,
+		const struct sockaddr *s_addr, int addr_len)
+{
+	int ne = append_string_f(buffer, buffer_size,
+			aux_buffer, aux_buffer_size, 0,
+			" fam %d", s_addr->sa_family);
+
+	if (!ne)
+		switch (s_addr->sa_family) {
+		case AF_UNIX:
+			if (addr_len >= sizeof(struct sockaddr_un)) {
+				struct sockaddr_un *s_un =
+					(struct sockaddr_un *)s_addr;
+				ne |= append_string_f(buffer, buffer_size,
+					aux_buffer, aux_buffer_size, 0,
+					" UN \"%s\"", s_un->sun_path);
+			}
+			break;
+		case AF_INET:
+			if (addr_len >= sizeof(struct sockaddr_in)) {
+				struct sockaddr_in *s_in =
+					(struct sockaddr_in *)s_addr;
+				ne |= append_string_f(buffer, buffer_size,
+					aux_buffer, aux_buffer_size, 0,
+					" IP P%u A%pI4",
+					s_in->sin_port, &s_in->sin_addr);
+			}
+			break;
+		case AF_INET6:
+			if (addr_len >= sizeof(struct sockaddr_in6)) {
+				struct sockaddr_in6 *s_in =
+					(struct sockaddr_in6 *)s_addr;
+				ne |= append_string_f(buffer, buffer_size,
+					aux_buffer, aux_buffer_size, 0,
+					" IP6 P%uFI%u A%pI6 S%u",
+					s_in->sin6_port, s_in->sin6_flowinfo,
+					&s_in->sin6_addr, s_in->sin6_scope_id);
+			}
+			break;
+		}
+	return ne;
+}
+
+/* Specialized formatter for struct msghdr */
+static int dump_msghdr(char **buffer, int *buffer_size,
+		char *aux_buffer, size_t aux_buffer_size,
+		const struct user_msghdr *msg, int user_flags)
+{
+	int ne = append_string_f(buffer, buffer_size, aux_buffer,
+			aux_buffer_size, 0,
+			" namelen %d iovlen %lu controllen %zu flags %u uflags %d",
+			msg->msg_namelen, msg->msg_iovlen,
+			msg->msg_controllen, msg->msg_flags, user_flags);
+
+	if (ne)
+		return 1;
+	if (msg->msg_iovlen > 0) { /* Process message part contents */
+		struct iovec *iovec_p;
+		size_t eff_iovec_size = sizeof(struct iovec) * msg->msg_iovlen;
+
+		iovec_p = clone_from_user(0, (void *)msg->msg_iov,
+				&eff_iovec_size, buffer, buffer_size,
+				"iovec", &ne);
+
+		if (eff_iovec_size) {
+			/* For each message part dump its index,
+			 * length and contents (up to DUMP_MAX bytes)
+			 */
+			int i;
+			#define DUMP_MAX 20 // arbitrary
+
+			for (i = 0;
+				!ne &&
+				  i < eff_iovec_size / sizeof(struct iovec);
+				++i) {
+				size_t part_len = iovec_p[i].iov_len;
+				char bbuffer[20];
+				unsigned char *part;
+
+				ne |= append_string_f(buffer, buffer_size,
+						bbuffer, sizeof(bbuffer), 0,
+						" M%d(%zu):", i, part_len);
+				if (ne)
+					break;
+				if (part_len > DUMP_MAX)
+					part_len = DUMP_MAX;
+				part = clone_from_user(0,
+						(void *)iovec_p[i].iov_base,
+						&part_len, buffer, buffer_size,
+						"iovec part", &ne);
+				if (part_len) {
+					ne |= append_string(buffer,
+						buffer_size,
+						part,
+						part_len, 1);
+				}
+				kfree(part);
+			}
+			#undef DUMP_MAX
+		}
+		kfree(iovec_p);
+	}
+	if (msg->msg_namelen > 1 && msg->msg_name) {
+		/* process message destination, if any; probably nononessential
+		 * if dump_sockaddr is called too
+		 */
+		char *name_copy; // copy of msg->msg_name from userspace
+		size_t namelen = msg->msg_namelen; // effective length after copying from userspace
+
+		ne |= append_string_s(buffer, buffer_size, " {", 0);
+		name_copy = clone_from_user(0, msg->msg_name,
+				&namelen, buffer, buffer_size, "name", &ne);
+		if (!name_copy)
+			return ne;
+		if (namelen >= sizeof(struct sockaddr_in)) {
+			/* Maybe IPv4? */
+			struct sockaddr_in *sin =
+				(struct sockaddr_in *)name_copy;
+			char sin_buf[3 + 6 + 6 + 4 * 4 + 10];
+
+			ne |= append_string_f(buffer, buffer_size,
+				sin_buf, sizeof(sin_buf), 0,
+				"IP F%uP%u A%pI4",
+				sin->sin_family, sin->sin_port,
+				&sin->sin_addr);
+		}
+		if (namelen >= sizeof(struct sockaddr_in6)) {
+			/* Maybe IPv6? */
+			struct sockaddr_in6 *sin =
+				(struct sockaddr_in6 *)name_copy;
+			char sin_buf[4 + 6 + 6 + 12 + 8 * 5 + 12 + 10];
+
+			ne |= append_string_f(buffer, buffer_size,
+					sin_buf, sizeof(sin_buf), 0,
+					" IP6 F%uP%uFI%u A%pI6 S%u",
+					sin->sin6_family, sin->sin6_port,
+					sin->sin6_flowinfo, &sin->sin6_addr,
+					sin->sin6_scope_id);
+		}
+		ne |= append_string_s(buffer, buffer_size, "}", 0);
+		kfree(name_copy);
+	}
+	return ne;
+}
+
+/* Specialized formatter for the sendmsg syscall */
+static int dump_sendmsg(char **buffer, int *buffer_size,
+			const struct seccomp_data *sd)
+{
+	int ne; // *buffer_size was not enough, something was truncated
+	#define BUFFER_SZ 500 /* size of auxiliary buffer for assorted data */
+	char *sbuffer = kcalloc(1, BUFFER_SZ, GFP_KERNEL);
+
+	if (!sbuffer)
+		return 1;
+	ne = append_string_f(buffer, buffer_size, sbuffer, BUFFER_SZ, 0,
+				" sock {fd %lld", sd->args[0]);
+	if (ne)
+		goto end;
+	{ /* Dump information on socket's peer */
+		int err;
+		struct socket *s_socket = sockfd_lookup(sd->args[0], &err);
+
+		if (s_socket) {
+			struct sockaddr s_addr;
+
+			ne |= append_string_f(buffer, buffer_size,
+					sbuffer, BUFFER_SZ, 0,
+					" type %d", s_socket->type);
+			if (ne)
+				goto end;
+			err = kernel_getpeername(s_socket, &s_addr);
+			if (err > 0)
+				ne |= dump_sockaddr(buffer, buffer_size,
+					sbuffer, BUFFER_SZ, &s_addr, err);
+		} else {
+			ne |= append_string_f(buffer, buffer_size,
+					sbuffer, BUFFER_SZ, 0,
+					" (socket lookup failed %d)", err);
+		}
+		if (ne)
+			goto end;
+	}
+	ne = append_string_s(buffer, buffer_size, "}", 0);
+	if (!ne && sd->args[1]) {
+		struct user_msghdr msg;
+
+		ne = copy_from_user((void *)&msg,
+				(void *)sd->args[1], sizeof(msg))
+			? append_string_s(buffer, buffer_size,
+					"(failed to copy)", 0)
+			: dump_msghdr(buffer, buffer_size, sbuffer, BUFFER_SZ,
+				&msg, sd->args[2]);
+	}
+end:
+	kfree(sbuffer);
+	return ne;
+	#undef BUFFER_SZ
+}
+
+/* Default formatter for syscalls. Dumps parameters as numbers and strings. */
+static int dump_syscall_default(char **buffer, int *buffer_size,
+		const struct syscall_api *api,
+		const struct seccomp_data *sd)
+{
+	int ne = 0;
+	size_t j;
+
+	#define DUMP_MAX 1000 // size should be at most MSG_SZ
+	for (j = 0; j < ARRAY_SIZE(sd->args) && j < api->nargs; ++j) {
+		if (api->arg_str & (1 << j)) { // parameter is a string
+			char quote = 1;
+			const char *txt = (const char *)sd->args[j];
+			char *u_bufferp;
+			size_t u_buffersz = DUMP_MAX;
+
+			if (!txt)
+				quote = 0;
+			u_bufferp = clone_from_user(0, txt, &u_buffersz,
+							buffer, buffer_size, "args", &ne);
+			if (u_buffersz) {
+				if (append_string_s(buffer, buffer_size, " ", 0) ||
+					append_string(buffer, buffer_size, u_bufferp, u_buffersz, quote))
+						ne = 1;
+			}
+			kfree(u_bufferp);
+			if (ne)
+				break;
+		} else {
+			char sbuffer[20];
+
+			ne |= append_string_f(buffer, buffer_size, sbuffer,
+				sizeof(sbuffer), 0, " %lld", sd->args[j]);
+			if (ne)
+				break;
+		}
+	}
+	#undef DUMP_MAX
+	return ne;
+}
+
+/* dump_syscall_base: generate string summarizing call arguments
+ * @buffer: target string
+ * @buffer_size: target size, including terminator
+ * @sd: seccomp invocation descriptor
+ * Returns 0 if successful, 1 if text was clipped
+ */
+static int dump_syscall_base(char *buffer, int buffer_size,
+				const struct seccomp_data *sd)
+{
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+
+	static struct syscall_api apis[] = {
+		{__NR_read, "read", 3},
+		{__NR_write, "write", 3},
+		#ifdef __NR_open
+		{__NR_open, "open", 3, AS0},
+		#endif
+		{__NR_close, "close", 1},
+		#ifdef __NR_stat
+		{__NR_stat, "stat", 2, AS0},
+		#endif
+		{__NR_fstat, "fstat", 2},
+		#ifdef __NR_lstat
+		{__NR_lstat, "lstat", 2, AS0},
+		#endif
+		{__NR_sendto, "sendto", 6},
+		{__NR_sendmsg, "sendmsg", 3, 0, dump_sendmsg},
+		#ifdef __NR_unlinkat
+		{__NR_unlinkat, "unlinkat", 3, AS1},
+		#endif
+		#ifdef __NR_renameat
+		{__NR_renameat, "renameat", 4, AS1 | AS3},
+		#endif
+		#ifdef __NR_statfs
+		{__NR_statfs, "statfs", 2, AS0},
+		#endif
+		#ifdef __NR_faccessat
+		{__NR_faccessat, "faccessat", 3, AS1},
+		#endif
+		#ifdef __NR_chmodat
+		{__NR_fchmodat, "fchmodat", 3, AS1},
+		#endif
+		#ifdef __NR_openat
+		{__NR_openat, "openat", 4, AS1},
+		#endif
+		#ifdef __NR_readlinkat
+		{__NR_readlinkat, "readlinkat", 4, AS1},
+		#endif
+	};
+#pragma GCC diagnostic pop
+
+	char sbuffer[100];
+	size_t i;
+	char ne = 0; /* buffer_size was not enough */
+	char syscall_found = 0;
+
+	if (buffer_size < 1)
+		return 1;
+	*buffer = 0;
+	for (i = 0; i < ARRAY_SIZE(apis); ++i)
+		if (apis[i].nr == sd->nr) {
+			syscall_found = 1;
+			ne = append_string_f(&buffer, &buffer_size,
+					sbuffer, sizeof(sbuffer), 0,
+					"SC %d/%s", sd->nr, apis[i].name)
+				|| (apis[i].dump
+					? apis[i].dump(&buffer, &buffer_size, sd)
+					: dump_syscall_default(&buffer, &buffer_size,
+							apis + i, sd));
+			break;
+		}
+	if (!syscall_found) {
+		ne |= append_string_f(&buffer, &buffer_size,
+			sbuffer, sizeof(sbuffer), 0, "SC %d", sd->nr);
+		if (!ne)
+			for (i = 0; i < ARRAY_SIZE(sd->args); ++i) {
+				ne |= append_string_f(&buffer, &buffer_size,
+						sbuffer, sizeof(sbuffer), 0,
+						" %lld", sd->args[i]);
+				if (ne)
+					break;
+			}
+	}
+	return ne;
+}
+
+/* dump_syscall: format string describing syscall caller and arguments
+ * @buffer: target string, at least 4 chars long
+ * @buffer_size: available target size, including terminator
+ * @command: command of process invoking syscall
+ * @signr: signal number
+ * @sd: nonnull pointer to seccomp descriptor
+ */
+static void dump_syscall(char *buffer, int buffer_size, const char *command,
+			long signr, const struct seccomp_data *sd)
+{
+	int n_copied = snprintf(buffer, buffer_size,
+			"seccomp '%s' signum %ld pid %d uid %d ",
+			command, signr, current->pid, current_uid().val);
+	n_copied = n_copied < buffer_size
+		?  dump_syscall_base(buffer + n_copied, buffer_size - n_copied,
+				sd)
+		: 1;
+	if (n_copied) // something was truncated
+		strcpy(buffer + buffer_size - 4, "...");
+}
+
+#define MSG_SZ 1024  // Limit actually set by DSMS
+
+noinline void seccomp_notify_dsms(unsigned long syscall, long signr, u32 action,
+			const struct seccomp_data *sd)
+{
+	/* The current thread command may be different from the main thread */
+	struct task_struct *main_thread = current->group_leader;
+	char comm_buf[sizeof(main_thread->comm)];
+
+	get_task_comm(comm_buf, main_thread);
+	if (unlikely(strncmp("kumihodecoder", comm_buf, sizeof(main_thread->comm)) == 0)) {
+		char *msg = kcalloc(1, MSG_SZ, GFP_KERNEL);
 		int i;
 
-		snprintf(msg, MSG_SZ, "seccomp '%s' syscall %ld signum %ld pid %d uid %d",
-			comm_buf, syscall, signr, current->pid, current_uid());
-		i = dsms_send_message("KMH0", msg, action);
-		if (unlikely(i != DSMS_SUCCESS))
-			pr_warn("%s::dsms_send_message failed: error %d msg <%s>\n", __func__, i, msg);
+		if (msg) {
+			dump_syscall(msg, MSG_SZ, comm_buf, signr, sd);
+			i = dsms_send_message("KMH0", msg, action);
+			if (unlikely(i != DSMS_SUCCESS))
+				pr_warn("%s::dsms_send_message failed: error %d msg <%s>\n", __func__, i, msg);
+			kfree(msg);
+		} else
+			pr_warn("%s: out of memory", __func__);
 	}
 }
 
 #undef MSG_SZ
 
 #else
-#define seccomp_notify_dsms(syscall, signumber, action) /* nothing */
+#define seccomp_notify_dsms(syscall, signumber, action, sd) /* nothing */
 #endif
 // SEC_PRODUCT_FEATURE_SECURITY_SUPPORT_DSMS }
 
 static inline void seccomp_log(unsigned long syscall, long signr, u32 action,
-			       bool requested)
+			       bool requested, const struct seccomp_data *sd)
 {
 	bool log = false;
 
@@ -1006,7 +1550,7 @@ static inline void seccomp_log(unsigned long syscall, long signr, u32 action,
 		log = seccomp_actions_logged & SECCOMP_LOG_KILL_PROCESS;
 	}
 	if (action != SECCOMP_RET_ALLOW)
-		seccomp_notify_dsms(syscall, signr, action);
+		seccomp_notify_dsms(syscall, signr, action, sd);
 
 	/*
 	 * Emit an audit message when the action is RET_KILL_*, RET_LOG, or the
@@ -1046,7 +1590,7 @@ static void __secure_computing_strict(int this_syscall)
 	dump_stack();
 #endif
 	current->seccomp.mode = SECCOMP_MODE_DEAD;
-	seccomp_log(this_syscall, SIGKILL, SECCOMP_RET_KILL_THREAD, true);
+	seccomp_log(this_syscall, SIGKILL, SECCOMP_RET_KILL_THREAD, true, 0);
 	do_exit(SIGKILL);
 }
 
@@ -1283,7 +1827,7 @@ static int __seccomp_filter(int this_syscall, const struct seccomp_data *sd,
 		return 0;
 
 	case SECCOMP_RET_LOG:
-		seccomp_log(this_syscall, 0, action, true);
+		seccomp_log(this_syscall, 0, action, true, sd);
 		return 0;
 
 	case SECCOMP_RET_ALLOW:
@@ -1298,7 +1842,7 @@ static int __seccomp_filter(int this_syscall, const struct seccomp_data *sd,
 	case SECCOMP_RET_KILL_PROCESS:
 	default:
 		current->seccomp.mode = SECCOMP_MODE_DEAD;
-		seccomp_log(this_syscall, SIGSYS, action, true);
+		seccomp_log(this_syscall, SIGSYS, action, true, sd);
 		/* Dump core only if this is the last remaining thread. */
 		if (action != SECCOMP_RET_KILL_THREAD ||
 		    (atomic_read(&current->signal->live) == 1)) {
@@ -1315,7 +1859,7 @@ static int __seccomp_filter(int this_syscall, const struct seccomp_data *sd,
 	unreachable();
 
 skip:
-	seccomp_log(this_syscall, 0, action, match ? match->log : false);
+	seccomp_log(this_syscall, 0, action, match ? match->log : false, sd);
 	return -1;
 }
 #else

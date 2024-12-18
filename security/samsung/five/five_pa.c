@@ -183,5 +183,10 @@ static __init int proca_module_init(void)
 }
 late_initcall(proca_module_init);
 
+#if defined(CONFIG_SEC_KUNIT)
+EXPORT_SYMBOL_GPL(proca_fcntl_setxattr);
+EXPORT_SYMBOL_GPL(pa_process_file);
+#endif
+
 MODULE_DESCRIPTION("PROCA module");
 MODULE_LICENSE("GPL");

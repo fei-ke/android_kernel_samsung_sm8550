@@ -29,10 +29,30 @@ else
 endif
 
 # kunit tests options:
-ifeq ($(CONFIG_SEC_KUNIT)$(CONFIG_UML), yy)
+ENABLED_TARGETS_LIST = b0s g0s
+ifeq ($(CONFIG_SEC_KUNIT), y)
   GCOV_PROFILE := y
-  subdir-$(CONFIG_FIVE) += kunit_test
-  obj-$(CONFIG_FIVE) += kunit_test/
-  five-$(CONFIG_FIVE) += five_dsms.o
   EXTRA_CFLAGS += -DFIVE_KUNIT_ENABLED
+  five-$(CONFIG_FIVE) += five_dsms.o
+  ifeq ($(CONFIG_UML), y)
+    subdir-$(CONFIG_FIVE) += kunit_test
+    obj-$(CONFIG_FIVE) += kunit_test/
+  else
+    ifneq ($(filter $(TARGET_DEVICE),$(ENABLED_TARGETS_LIST)),)
+      five-$(CONFIG_FIVE) += kunit_test/five_file.o
+      obj-m += kunit_test/five_lv_test.o
+      obj-m += kunit_test/five_crypto_test.o
+      obj-m += kunit_test/five_cache_test.o
+      obj-m += kunit_test/five_dmverity_test.o
+      obj-m += kunit_test/five_keyring_test.o
+      obj-m += kunit_test/task_integrity_test.o
+      obj-m += kunit_test/five_cert_test.o
+      obj-m += kunit_test/five_state_test.o
+      ifeq ($(CONFIG_FIVE_PA_FEATURE), y)
+        obj-m += kunit_test/five_pa_test.o
+      endif
+    else
+      $(warning security/five: TARGET_DEVICE: $(TARGET_DEVICE). skip on-device kunit test)
+    endif
+  endif
 endif

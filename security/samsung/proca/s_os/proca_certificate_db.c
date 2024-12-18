@@ -28,6 +28,7 @@
 #include "proca_certificate_db.h"
 #include "proca_log.h"
 #include "proca_vfs.h"
+#include "proca_porting.h"
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 42)
 #include "proca_certificate_db.asn1.h"
@@ -259,29 +260,6 @@ struct certificate_entry *proca_certificate_db_find_entry(
 	return NULL;
 }
 
-static const char *proca_d_path(struct file *file, char **pathbuf, char *namebuf)
-{
-	const struct path *path = &file->f_path;
-	char *pathname = NULL;
-
-	*pathbuf = __getname();
-	if (*pathbuf) {
-		pathname = d_absolute_path(path, *pathbuf, PATH_MAX);
-		if (IS_ERR(pathname)) {
-			__putname(*pathbuf);
-			*pathbuf = NULL;
-			pathname = NULL;
-		}
-	}
-
-	if (!pathname) {
-		strlcpy(namebuf, path->dentry->d_name.name, NAME_MAX);
-		pathname = namebuf;
-	}
-
-	return pathname;
-}
-
 /*
  * proca_db_is_ready() - Verify if partition of database is
  * mounted and actual db file exist
@@ -444,10 +422,13 @@ int load_db(const char *file_path,
 
 	PROCA_INFO_LOG("Read %d bytes.\n", db_size);
 
-	if (atomic_read(&proca_db->status) == INITED)
-		goto do_clean;
-
 	mutex_lock(&proca_db->lock);
+
+	if (atomic_read(&proca_db->status) == INITED) {
+		mutex_unlock(&proca_db->lock);
+		goto do_clean;
+	}
+
 	db = &proca_db->proca_certificates_db;
 	res = parse_proca_db(data_buff, db_size, db);
 	if (res) {

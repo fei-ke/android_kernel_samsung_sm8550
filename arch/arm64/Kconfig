@@ -1144,6 +1144,8 @@ choice
 config CPU_BIG_ENDIAN
 	bool "Build big-endian kernel"
 	depends on !LD_IS_LLD || LLD_VERSION >= 130000
+	# https://github.com/llvm/llvm-project/commit/1379b150991f70a5782e9a143c2ba5308da1161c
+	depends on AS_IS_GNU || AS_VERSION >= 150000
 	help
 	  Say Y if you plan on running a kernel with a big-endian userspace.
 
@@ -2168,7 +2170,7 @@ config KDP_NS
 	  
 config RKP_TEST
 	bool "Enable RKP test"
-	depends on !SAMSUNG_PRODUCT_SHIP && RKP
+	depends on RKP
 	default y
 	help
 	  It is a test feature for RKP debugging.
@@ -2181,7 +2183,7 @@ config RKP_TEST
 	  
 config KDP_TEST
 	bool "Enable KDP test"
-	depends on !SAMSUNG_PRODUCT_SHIP && KDP_CRED && KDP_NS
+	depends on KDP_CRED && KDP_NS
 	default y
 	help
 	  It is a test configuration for KDP debugging.

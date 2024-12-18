@@ -543,3 +543,8 @@ int five_calc_data_hash(const uint8_t *data, size_t data_len,
 {
 	return five_calc_data_shash(data, data_len, hash_algo, hash, hash_len);
 }
+
+#if defined(CONFIG_SEC_KUNIT)
+EXPORT_SYMBOL_GPL(five_calc_file_hash);
+EXPORT_SYMBOL_GPL(five_calc_data_hash);
+#endif

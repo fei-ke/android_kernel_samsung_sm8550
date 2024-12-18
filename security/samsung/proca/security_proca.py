@@ -75,8 +75,7 @@ config = {
                         "CONFIG_DM_VERITY=y",
                         "CONFIG_CRYPTO_SHA256=y",
                         "CONFIG_DEBUG_KERNEL=y",
-                        "CONFIG_DEBUG_INFO=y",
-                        "CONFIG_GCOV=y"
+                        "CONFIG_DEBUG_INFO=y"
                     ],
                     "False": [],
                 },
@@ -89,7 +88,6 @@ config = {
 
 def load():
     return config
-
 
 if __name__ == "__main__":
     print(load())

@@ -5,6 +5,7 @@
  * under the terms of the GNU General Public License version 2
  * as published by the Free Software Foundation.
  */
+#include <linux/version.h>
 #include "drivers/md/dm.h"
 #include "drivers/md/dm-core.h"
 #include "drivers/block/loop.h"
@@ -28,6 +29,7 @@ extern bool check_prebuilt_paths_dmverity;
 #define SRCU_IDX 2020  // any int number
 #define S_DEV 2019 // any int number
 
+#if defined(CONFIG_UML)
 DEFINE_FUNCTION_MOCK(
 	METHOD(call_dm_get_md), RETURNS(struct mapped_device *),
 	PARAMS(dev_t));
@@ -66,6 +68,7 @@ DECLARE_FUNCTION_MOCK(
 	METHOD(five_d_path), RETURNS(const char *),
 	PARAMS(const struct path *, char **, char *));
 #endif
+#endif
 
 typedef struct {int foo; } fake_dm_table_t;
 
@@ -78,13 +81,14 @@ static struct file *create_file_obj(struct kunit *test)
 	return foo;
 }
 
+#if defined(CONFIG_UML)
 static struct mapped_device *create_mapped_device_obj(
 	struct kunit *test, int policy, char *disk_name)
 {
 	DECLARE_NEW(test, struct mapped_device, foo);
 
 	foo->disk = NEW(test, struct gendisk);
-#ifndef FIVE_KUNIT_SM8650U
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 11, 0)
 	foo->disk->part0.policy = policy;
 #else
 	foo->disk->part0 = NEW(test, struct block_device);
@@ -95,6 +99,7 @@ static struct mapped_device *create_mapped_device_obj(
 		memcpy(foo->disk->disk_name, disk_name, strlen(disk_name) + 1);
 	return foo;
 }
+#endif
 
 static void five_dmverity_is_loop_device_null_inode_test(struct kunit *test)
 {
@@ -155,6 +160,7 @@ static void five_dmverity_is_dmverity_partition_null_sb_test(
 		(enum five_dmverity_codes)FIVE_DMV_BAD_INPUT);
 }
 
+#if defined(CONFIG_UML)
 static void five_dmverity_is_dmverity_partition_null_md_test(
 	struct kunit *test)
 {
@@ -564,6 +570,7 @@ static void five_dmverity_is_dmverity_loop_correct_back_file_test(
 	KUNIT_EXPECT_EQ(test, is_dmverity_loop(p_file),
 		(enum five_dmverity_codes)FIVE_DMV_BAD_INPUT);
 }
+#endif // CONFIG_UML
 
 static void five_dmverity_is_dmverity_protected_null_file_test(
 	struct kunit *test)
@@ -571,6 +578,7 @@ static void five_dmverity_is_dmverity_protected_null_file_test(
 	KUNIT_EXPECT_FALSE(test, five_is_dmverity_protected(NULL));
 }
 
+#if defined(CONFIG_UML)
 #if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP) || defined(CONFIG_FIVE_DEBUG)
 static void five_check_prebuilt_paths_false_test(
 	struct kunit *test)
@@ -683,6 +691,7 @@ static void five_dmvrt_is_dmverity_protected_non_loop_device_true_test(
 
 	KUNIT_EXPECT_TRUE(test, five_is_dmverity_protected(p_file));
 }
+#endif // CONFIG_UML
 
 static struct kunit_case five_dmverity_test_cases[] = {
 	KUNIT_CASE(five_dmverity_is_loop_device_null_inode_test),
@@ -691,6 +700,7 @@ static struct kunit_case five_dmverity_test_cases[] = {
 	KUNIT_CASE(five_dmverity_is_loop_device_correct_s_dev_test),
 	KUNIT_CASE(five_dmverity_is_dmverity_partition_null_inode_test),
 	KUNIT_CASE(five_dmverity_is_dmverity_partition_null_sb_test),
+#if defined(CONFIG_UML)
 	KUNIT_CASE(five_dmverity_is_dmverity_partition_null_md_test),
 	KUNIT_CASE(five_dmverity_is_dmverity_partition_null_disc_test),
 	KUNIT_CASE(five_dmverity_is_dmverity_partition_not_ro_disc_test),
@@ -708,7 +718,9 @@ static struct kunit_case five_dmverity_test_cases[] = {
 	KUNIT_CASE(five_dmverity_is_dmverity_loop_null_private_data_test),
 	KUNIT_CASE(five_dmverity_is_dmverity_loop_null_back_file_test),
 	KUNIT_CASE(five_dmverity_is_dmverity_loop_correct_back_file_test),
+#endif // CONFIG_UML
 	KUNIT_CASE(five_dmverity_is_dmverity_protected_null_file_test),
+#if defined(CONFIG_UML)
 #if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP) || defined(CONFIG_FIVE_DEBUG)
 	KUNIT_CASE(five_check_prebuilt_paths_false_test),
 	KUNIT_CASE(five_check_prebuilt_paths_true_test),
@@ -716,6 +728,7 @@ static struct kunit_case five_dmverity_test_cases[] = {
 	KUNIT_CASE(five_dmverity_is_dmverity_protected_loop_device_test),
 	KUNIT_CASE(five_dmvrt_is_dmverity_protected_non_loop_device_false_test),
 	KUNIT_CASE(five_dmvrt_is_dmverity_protected_non_loop_device_true_test),
+#endif // CONFIG_UML
 	{},
 };
 

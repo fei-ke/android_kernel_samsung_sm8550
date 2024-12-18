@@ -141,7 +141,7 @@ int sig_report(struct task_struct *p, bool report_pid)
 	int target_pid = task_tgid_nr(p);
 	memset(&data, 0, sizeof(struct priv_data));
 	data.target_uid = task_uid(p).val;
-	if (report_pid) {
+	if (report_pid && !p->group_leader->ptrace) {
 		data.flag = target_pid;
 	}
 	if (thread_group_is_frozen(p) && (target_pid != last_kill_pid)) {

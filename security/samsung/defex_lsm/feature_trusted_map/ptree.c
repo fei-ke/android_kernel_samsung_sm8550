@@ -8,6 +8,7 @@
 
 #include <linux/slab.h>
 #include <linux/string.h>
+
 #include "include/defex_debug.h"
 #include "include/ptree.h"
 
@@ -110,7 +111,7 @@ static const unsigned char *pptree_bytearray(const struct PPTree *tree, int i,
 		defex_log_warn("Ptree: Bad bytearray index: %d (max %d)", i, tree->bTable.size);
 		if (length)
 			*length = 0;
-		return "";
+		return (const unsigned char *)"";
 	}
 	index = charp2UInt(bTable + i * bcs, bcs);
 	if (length) {
@@ -252,7 +253,8 @@ int pptree_find(const struct PPTree *tree, const char **path, int pathLen,
 		return 0;
 	for (depth = 0; depth < pathLen; ++depth) {
 		const char *s;
-		int rCmp, sIndex, i;
+		int rCmp, sIndex;
+		unsigned int i;
 		unsigned int itemSize, childCount;
 
 		load_node_prologue(tree, &p, &itemSize, &dataTypes, &childCount);
@@ -330,6 +332,7 @@ int pptree_find_path(const struct PPTree *tree, const char *path, char delim,
 		/* No path array to fill, just use last result */
 		pathItems = 0;
 		itemCount = 0;
+		//ctx->types &= ~PTREE_FIND_PEEKED;
 	} else {
 		if (!delim) {
 			/* Special case, consider the whole string as
@@ -416,6 +419,37 @@ int pptree_iterate_children(const struct PPTree *tree,
 	return ret;
 }
 
+int pptree_has_child(const struct PPTree *tree,
+		     struct PPTreeContext *ctx,
+		     const char *name,
+		     struct PPTreeContext *itemDataRet)
+{
+	const unsigned char *p;
+	unsigned int i, childCount, itemSize, dataTypes, sIndex;
+
+	p = tree->nodes.root + pptree_get_offset(tree, ctx);
+	load_node_prologue(tree, &p, &itemSize, &dataTypes, &childCount);
+	for (i = 0; i < childCount; ++i) {
+		struct PPTreeContext itemData;
+
+		sIndex = charp2UInt(p, tree->sTable.indexSize);
+		if (dataTypes)
+			pptree_get_itemData(tree,
+					    p + tree->nodes.offsetSize +
+					    tree->nodes.offsetSize,
+					    dataTypes, &itemData);
+		else
+			itemData.types = 0;
+		if (!strcmp(name,
+			    (const char *)pptree_string(tree, sIndex))) {
+			if (itemDataRet)
+				*itemDataRet = itemData;
+			return 1;
+		}
+	}
+	return 0;
+}
+
 /* Recursively traverses all children in subpath of a node given
  * by <tree>+<offset>, invoking <f> on all paths ending on a leaf.
  * Returns last result of <f>. Stops prematurely if <f> returns nonzero.
@@ -472,4 +506,3 @@ int pptree_iterate_paths(const struct PPTree *tree,
 	return pptree_iterate_subpaths(tree, pptree_get_offset(tree, ctx),
 				       0, f, path, maxPathLen, data);
 }
-

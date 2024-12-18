@@ -131,16 +131,21 @@ int dtm_enforce(struct dtm_context *context)
 		return DTM_DENY;
 	}
 	pp_ctx.types |= PTREE_FIND_PEEK;
-	if (pptree_child_count(pptree, &pp_ctx) == 1 &&
-	    pptree_find_path(pptree, DTM_ANY_VALUE, 0, &pp_ctx)) {
-		defex_log_info("[TME callee '%s', caller '%s': program may be '*...'",
-			callee_path, caller_path);
+
+	// Try exact match first
+	if (pptree_find_path(pptree, *program_name == '/'
+				? program_name + 1 : program_name, '/', &pp_ctx) &&
+		      (pp_ctx.types & PTREE_DATA_INT2)) {
 		pp_ctx.types |= PTREE_FIND_PEEKED;
-		pptree_find_path(pptree, 0, 0, &pp_ctx);
+		pptree_find_path(pptree, "", 0, &pp_ctx);
+		pp_ctx.types &= ~PTREE_FIND_PEEKED;
 	} else {
+		// now try '*'
 		pp_ctx.types &= ~PTREE_FIND_PEEK;
-		if (!(pptree_find_path(pptree, *program_name == '/' ? program_name + 1 : program_name, '/', &pp_ctx) &&
-		      (pp_ctx.types & PTREE_DATA_INT2))) {
+		if (pptree_find_path(pptree, DTM_ANY_VALUE, 0, &pp_ctx)) {
+			defex_log_info("[TME callee '%s', caller '%s': program may be '*...'",
+			       callee_path, caller_path);
+		} else {
 			defex_log_info("(6) TMED callee '%s', caller '%s': program '%s' not found",
 				callee_path, caller_path, program_name);
 			dtm_report_violation(DTM_PROGRAM_VIOLATION, context);
@@ -160,19 +165,23 @@ int dtm_enforce(struct dtm_context *context)
 	}
 	/* Check program arguments, if any */
 	pp_ctx.types |= PTREE_FIND_CONTINUE;
+	pp_ctx.types &= ~PTREE_FIND_PEEKED;
 	for (call_argc = context->callee_argc, argc = 1;
-	     argc <= call_argc && pptree_child_count(pptree, &pp_ctx);
+	     argc < call_argc && pptree_child_count(pptree, &pp_ctx);
 	     ++argc) {
 		pp_ctx.types |= PTREE_FIND_PEEK;
-		if (pptree_find_path(pptree, DTM_ANY_VALUE, 0, &pp_ctx)) {
-			defex_log_info("(8) TME callee '%s', caller '%s', program '%s': any arguments accepted",
-				callee_path, caller_path, program_name);
-			return DTM_ALLOW;
-		}
-		pp_ctx.types &= PTREE_FIND_PEEKED;
-		pp_ctx.types |= PTREE_FIND_CONTINUE;
 		argument_value = dtm_get_callee_arg(context, argc);
-		if (!pptree_find_path(pptree, argument_value, 0, &pp_ctx)) {
+		if (pptree_find_path(pptree, argument_value, 0, &pp_ctx)) {
+			pp_ctx.types |= PTREE_FIND_PEEKED;
+			pptree_find_path(pptree, "", 0, &pp_ctx);
+			pp_ctx.types &= ~PTREE_FIND_PEEKED;
+		} else {
+			pp_ctx.types &= ~PTREE_FIND_PEEK;
+			if (pptree_find_path(pptree, DTM_ANY_VALUE, 0, &pp_ctx)) {
+				defex_log_info("(8) TME callee '%s', caller '%s', program '%s': any arguments accepted",
+					callee_path, caller_path, program_name);
+				return DTM_ALLOW;
+			}
 			defex_log_info(
 				"(9) TMED callee '%s', caller '%s', program '%s': argument '%s' (%d of %d) not found",
 				callee_path, caller_path, program_name,
@@ -187,6 +196,15 @@ int dtm_enforce(struct dtm_context *context)
 				argument_value ? argument_value : "(null)");
 			return DTM_ALLOW;
 		}
+	}
+	if (call_argc > 1 && pptree_child_count(pptree, &pp_ctx) &&
+		!pptree_find_path(pptree, DTM_ANY_VALUE, 0, &pp_ctx)) {
+		defex_log_info(
+			"(11) TMED callee '%s', caller '%s', program '%s': %d argument(s), more required",
+			callee_path, caller_path, program_name,
+			call_argc);
+		dtm_report_violation(DTM_ARGUMENTS_VIOLATION, context);
+		return DTM_DENY;
 	}
 	if (call_argc && argc > call_argc)
 		defex_log_info("TME callee '%s', caller '%s', program '%s': all %d argument(s) checked",

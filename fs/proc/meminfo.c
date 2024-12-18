@@ -190,9 +190,9 @@ static int meminfo_proc_show(struct seq_file *m, void *v)
 	show_val_kb(m, "CmaFree:        ",
 		    global_zone_page_state(NR_FREE_CMA_PAGES));
 #endif
-	show_val_kb(m, "KgslShmemUsage: ", kgsl_shmem_usage_pages);
-	show_val_kb(m, "KgslReclaimed:  ", kgsl_reclaimed_pages);
 	trace_android_vh_meminfo_proc_show(m);
+	show_val_kb(m, "GpuSwap:        ", kgsl_reclaimed_pages);
+	show_val_kb(m, "KgslShmemUsage: ", kgsl_shmem_usage_pages);
 
 	hugetlb_report_meminfo(m);
 

@@ -120,7 +120,8 @@ struct sdfat_mount_options {
 	unsigned char utf8;
 	unsigned char casesensitive;
 	unsigned char adj_hidsect;
-	unsigned char tz_utc;
+	unsigned char tz_set;
+	int time_offset;
 	unsigned char improved_allocation;
 	unsigned char defrag;
 	unsigned char symlink;      /* support symlink operation */

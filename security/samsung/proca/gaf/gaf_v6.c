@@ -135,7 +135,11 @@ static struct GAForensicINFO {
 	.list_head_struct_prev = offsetof(struct list_head, prev),
 #if defined(CONFIG_KDP_NS) || defined(CONFIG_RKP_NS_PROT) || defined(CONFIG_RUSTUH_KDP_NS)
 	.is_kdp_ns_on = true,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
 	.struct_vfsmount_bp_mount = offsetof(struct kdp_vfsmount, bp_mount),
+#else
+	.struct_vfsmount_bp_mount = offsetof(struct vfsmount, bp_mount),
+#endif
 #else
 	.is_kdp_ns_on = false,
 #endif

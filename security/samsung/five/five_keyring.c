@@ -284,3 +284,8 @@ int __init five_keyring_init(void)
 	}
 	return err;
 }
+
+#if defined(CONFIG_SEC_KUNIT)
+EXPORT_SYMBOL_GPL(five_request_asymmetric_key);
+EXPORT_SYMBOL_GPL(five_keyring);
+#endif

@@ -22,6 +22,10 @@
 
 #include "internal.h"
 
+#if defined(CONFIG_CRYPTO_SKC_FIPS)
+#include "fips140_3_services_internal.h"
+#endif  // CONFIG_CRYPTO_SKC_FIPS
+
 static const struct crypto_type crypto_ahash_type;
 
 struct ahash_request_priv {
@@ -174,6 +178,10 @@ int crypto_ahash_setkey(struct crypto_ahash *tfm, const u8 *key,
 {
 	unsigned long alignmask = crypto_ahash_alignmask(tfm);
 	int err;
+
+#if defined(CONFIG_CRYPTO_SKC_FIPS)
+	crypto_hmac_set_key_approve_status(tfm, keylen);
+#endif  // CONFIG_CRYPTO_SKC_FIPS
 
 	if ((unsigned long)key & alignmask)
 		err = ahash_setkey_unaligned(tfm, key, keylen);
@@ -344,6 +352,10 @@ int crypto_ahash_final(struct ahash_request *req)
 	unsigned int nbytes = req->nbytes;
 	int ret;
 
+#if defined(CONFIG_CRYPTO_SKC_FIPS)
+	calc_final_state_service_indicator(tfm);
+#endif  // CONFIG_CRYPTO_SKC_FIPS
+
 	crypto_stats_get(alg);
 	ret = crypto_ahash_op(req, crypto_ahash_reqtfm(req)->final);
 	crypto_stats_ahash_final(nbytes, ret, alg);
@@ -358,6 +370,10 @@ int crypto_ahash_finup(struct ahash_request *req)
 	unsigned int nbytes = req->nbytes;
 	int ret;
 
+#if defined(CONFIG_CRYPTO_SKC_FIPS)
+	calc_final_state_service_indicator(tfm);
+#endif  // CONFIG_CRYPTO_SKC_FIPS
+
 	crypto_stats_get(alg);
 	ret = crypto_ahash_op(req, crypto_ahash_reqtfm(req)->finup);
 	crypto_stats_ahash_final(nbytes, ret, alg);
@@ -371,6 +387,10 @@ int crypto_ahash_digest(struct ahash_request *req)
 	struct crypto_alg *alg = tfm->base.__crt_alg;
 	unsigned int nbytes = req->nbytes;
 	int ret;
+
+#if defined(CONFIG_CRYPTO_SKC_FIPS)
+	calc_final_state_service_indicator(tfm);
+#endif  // CONFIG_CRYPTO_SKC_FIPS
 
 	crypto_stats_get(alg);
 	if (crypto_ahash_get_flags(tfm) & CRYPTO_TFM_NEED_KEY)

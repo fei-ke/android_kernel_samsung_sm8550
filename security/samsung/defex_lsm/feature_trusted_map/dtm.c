@@ -13,6 +13,7 @@
 #include <linux/types.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/string.h>
 #include <linux/uaccess.h>
 #include <linux/version.h>
 #include <linux/binfmts.h>
@@ -24,6 +25,7 @@
 #include <linux/sched/task.h>
 #endif
 
+#include "include/defex_debug.h"
 #include "include/dtm.h"
 #include "include/dtm_engine.h"
 #include "include/dtm_log.h"
@@ -332,6 +334,7 @@ __visible_for_testing bool dtm_context_get(struct dtm_context *context,
 __visible_for_testing void dtm_context_put(struct dtm_context *context)
 {
 	dtm_kfree_args(context);
+	kfree(context->callee_argv_ref);
 }
 
 /*
@@ -346,7 +349,8 @@ const char *dtm_get_program_name(struct dtm_context *context)
 	context->program_name = dtm_get_callee_arg(context, 0);
 	if (context->program_name == NULL)
 		context->program_name = DTM_UNKNOWN;
-	return context->program_name;
+
+	return kbasename(context->program_name);
 }
 
 /**
@@ -390,8 +394,11 @@ int defex_trusted_map_lookup(struct defex_context *defex_context,
 	if (unlikely(!dtm_context_get(&context, defex_context, callee_argc, callee_argv_ref)))
 		goto out;
 	ret = dtm_enforce(&context);
+	defex_log_info("DTM RET = %d", ret);
 	dtm_context_put(&context);
 out:
+	if (dump.data)
+		kfree(dump.data);
 	return ret;
 }
 #else

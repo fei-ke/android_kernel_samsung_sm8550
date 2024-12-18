@@ -9,6 +9,8 @@
 #ifndef __DEFEX_DEBUG_H
 #define __DEFEX_DEBUG_H
 
+#include <linux/kobject.h>
+
 #define DBG_SETUID		0
 #define DBG_SET_FSUID		1
 #define DBG_SETGID		2
@@ -35,6 +37,8 @@ enum defex_log_level {
 	MSG_TIMEOFF = 32,
 	MSG_BLOB = 64
 };
+
+struct kset;
 
 int defex_create_debug(struct kset *defex_kset);
 

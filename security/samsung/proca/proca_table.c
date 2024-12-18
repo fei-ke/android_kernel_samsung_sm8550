@@ -161,3 +161,11 @@ struct proca_task_descr *proca_table_remove_by_task(
 
 	return target_task_descr;
 }
+
+#if defined(CONFIG_SEC_KUNIT)
+EXPORT_SYMBOL_GPL(proca_table_remove_by_task);
+EXPORT_SYMBOL_GPL(proca_table_init);
+EXPORT_SYMBOL_GPL(proca_table_get_by_task);
+EXPORT_SYMBOL_GPL(proca_table_add_task_descr);
+EXPORT_SYMBOL_GPL(compare_with_five_signature);
+#endif

@@ -47,7 +47,7 @@ void show_mem(unsigned int filter, nodemask_t *nodemask)
 #endif
 	pr_info("%s: %lu kB\n", "VmallocUsed", K(vmalloc_nr_pages()));
 	trace_android_vh_show_mem(filter, nodemask);
+	pr_info("%s: %lu kB\n", "GpuSwap", K(get_total_kgsl_reclaimed_pages()));
 	pr_info("%s: %lu kB\n", "KgslShmemUsage", K(get_total_kgsl_shmem_pages()));
-	pr_info("%s: %lu kB\n", "KgslReclaimed", K(get_total_kgsl_reclaimed_pages()));
 }
 EXPORT_SYMBOL_GPL(show_mem);

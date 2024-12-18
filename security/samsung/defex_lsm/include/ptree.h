@@ -164,6 +164,9 @@ extern int pptree_iterate_paths(const struct PPTree *tree,
 /* Dumps to stdout in human-readable format */
 extern void pptree_dump(const struct PPTree *tree);
 
+const char *pptree_get_child_name(const struct PPTree *tree, int offset);
+int pptree_next_child(const struct PPTree *tree, int offset);
+
 /* Maximum number of bytes for counters (practical reasonable limit) */
 #define UPPER_COUNT_SIZE 4
 

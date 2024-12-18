@@ -71,6 +71,8 @@ const char *sec_blkops_dbg_type_names[NR_F2FS_SEC_DBG_ENTRY] = {
 const char *sec_fua_mode_names[NR_F2FS_SEC_FUA_MODE] = {
 	"NONE",
 	"ROOT",
+	"DIR",
+	"NODE",
 	"ALL",
 };
 
@@ -764,7 +766,7 @@ out:
 	}
 #ifdef CONFIG_F2FS_ML_BASED_STREAM_SEPARATION
 	if (!strcmp(a->attr.name, "streamid_attr")) {
-		char *streamid_buf;
+		char *streamid_buf, *streamid_buf_orig;
 		char *ptr;
 		long long streamid_attr[STREAMID_PARAMS];
 		long long lt;
@@ -774,17 +776,18 @@ out:
 		if (!streamid_buf)
 			return -ENOMEM;
 
+		streamid_buf_orig = streamid_buf;
 		while ((ptr = strsep(&streamid_buf, " ")) != NULL) {
 
 			ret = kstrtoll(skip_spaces(ptr), 10, &lt);
 			if (ret < 0 || i >= STREAMID_PARAMS) {
-				kvfree(streamid_buf);
+				kvfree(streamid_buf_orig);
 				return -EINVAL;
 			}
 			streamid_attr[i++] = lt;
 		}
 
-		kvfree(streamid_buf);
+		kvfree(streamid_buf_orig);
 
 		if (i != STREAMID_PARAMS)
 			return -EINVAL;

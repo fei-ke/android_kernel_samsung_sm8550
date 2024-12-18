@@ -4,9 +4,11 @@
 #include "proca_test_certificate.h"
 #include "test_helpers.h"
 
+#if defined(CONFIG_UML)
 DEFINE_FUNCTION_MOCK(
 	METHOD(check_native_pa_id), RETURNS(bool),
 	PARAMS(const struct proca_certificate *, struct task_struct *));
+#endif
 
 static void parse_proca_certificate_test_pos(struct kunit *test)
 {
@@ -69,6 +71,7 @@ static void compare_with_five_signature_test(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, rc, 0);
 }
 
+#if defined(CONFIG_UML)
 static void is_certificate_relevant_to_task_test(struct kunit *test)
 {
 	bool rcb;
@@ -92,7 +95,7 @@ static void is_certificate_relevant_to_task_test(struct kunit *test)
 
 	KUNIT_EXPECT_EQ(test, (int)rcb, 1);
 }
-
+#endif
 
 static int security_proca_test_init(struct kunit *test)
 {
@@ -109,7 +112,9 @@ static struct kunit_case security_proca_test_cases[] = {
 	KUNIT_CASE(parse_proca_certificate_test_pos),
 	KUNIT_CASE(compare_with_five_signature_test_pos),
 	KUNIT_CASE(compare_with_five_signature_test),
+#if defined(CONFIG_UML)
 	KUNIT_CASE(is_certificate_relevant_to_task_test),
+#endif
 	{},
 };
 

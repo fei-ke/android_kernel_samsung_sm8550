@@ -116,3 +116,26 @@ bool proca_path_is_mounted(const char *str_path)
 	path_put(&path);
 	return true;
 }
+
+const char *proca_d_path(struct file *file, char **pathbuf, char *namebuf)
+{
+	const struct path *path = &file->f_path;
+	char *pathname = NULL;
+
+	*pathbuf = __getname();
+	if (*pathbuf) {
+		pathname = d_absolute_path(path, *pathbuf, PATH_MAX);
+		if (IS_ERR(pathname)) {
+			__putname(*pathbuf);
+			*pathbuf = NULL;
+			pathname = NULL;
+		}
+	}
+
+	if (!pathname) {
+		strlcpy(namebuf, path->dentry->d_name.name, NAME_MAX);
+		pathname = namebuf;
+	}
+
+	return pathname;
+}
