@@ -199,3 +199,13 @@ void task_integrity_set_reset_reason(struct task_integrity *intg,
 		intg->reset_file = file;
 	}
 }
+
+#if defined(CONFIG_SEC_KUNIT)
+EXPORT_SYMBOL_GPL(tint_reset_cause_to_string);
+EXPORT_SYMBOL_GPL(task_integrity_set_reset_reason);
+EXPORT_SYMBOL_GPL(task_integrity_free);
+EXPORT_SYMBOL_GPL(task_integrity_copy);
+EXPORT_SYMBOL_GPL(task_integrity_clear);
+EXPORT_SYMBOL_GPL(init_once);
+EXPORT_SYMBOL_GPL(copy_label);
+#endif

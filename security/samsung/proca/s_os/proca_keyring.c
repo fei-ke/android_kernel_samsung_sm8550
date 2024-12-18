@@ -7,6 +7,7 @@
 
 #include "proca_certificate_db.h"
 #include "proca_log.h"
+#include "proca_porting.h"
 
 static struct key *proca_keyring;
 static const char *proca_keyring_name = "_proca";
@@ -14,14 +15,13 @@ static const char *proca_keyring_name = "_proca";
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 6, 0)
 static inline int proca_verify_signature(struct key *key,
 			  struct public_key_signature *pks,
-			  struct signed_db *proca_signed_db)
+			  const char *signature, int sig_len)
 {
 	int ret = -ENOMEM;
 
 	pks->hash_algo = hash_algo_name[HASH_ALGO_SHA256];
 	pks->nr_mpi = 1;
-	pks->rsa.s = mpi_read_raw_data(proca_signed_db->signature,
-			proca_signed_db->signature_size);
+	pks->rsa.s = mpi_read_raw_data(signature, sig_len);
 
 	if (pks->rsa.s)
 		ret = verify_signature(key, pks);
@@ -33,14 +33,14 @@ static inline int proca_verify_signature(struct key *key,
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 20, 0)
 static inline int proca_verify_signature(struct key *key,
 			  struct public_key_signature *pks,
-			  struct signed_db *proca_signed_db)
+			  const char *signature, int sig_len)
 {
 	int ret = -ENOMEM;
 
 	pks->pkey_algo = "rsa";
 	pks->hash_algo = hash_algo_name[HASH_ALGO_SHA256];
-	pks->s = proca_signed_db->signature;
-	pks->s_size = proca_signed_db->signature_size;
+	pks->s = (u8 *)signature;
+	pks->s_size = sig_len;
 	ret = verify_signature(key, pks);
 
 	return ret;

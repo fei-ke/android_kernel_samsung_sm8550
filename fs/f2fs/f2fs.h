@@ -852,7 +852,11 @@ struct f2fs_inode_info {
 	struct list_head gdirty_list;	/* linked in global dirty list */
 	struct task_struct *atomic_write_task;	/* store atomic write task */
 	struct extent_tree *extent_tree;	/* cached extent_tree entry */
-	struct inode *cow_inode;	/* copy-on-write inode for atomic write */
+	union {
+		struct inode *cow_inode;	/* copy-on-write inode for atomic write */
+		struct inode *atomic_inode;
+					/* point to atomic_inode, available only for cow_inode */
+	};
 
 	/* avoid racing between foreground op and gc */
 	struct f2fs_rwsem i_gc_rwsem[2];
@@ -1343,7 +1347,7 @@ struct f2fs_io_info {
 	bool retry;		/* need to reallocate block address */
 	int compr_blocks;	/* # of compressed block addresses */
 	bool encrypted;		/* indicate file is encrypted */
-	bool post_read;		/* require post read */
+	bool meta_gc;		/* require meta inode GC */
 	enum iostat_type io_type;	/* io type */
 	struct writeback_control *io_wbc; /* writeback control */
 	struct bio **bio;		/* bio for ipu */
@@ -3274,6 +3278,7 @@ static inline void __mark_inode_dirty_flag(struct inode *inode,
 	case FI_INLINE_DOTS:
 	case FI_PIN_FILE:
 	case FI_COMPRESS_RELEASED:
+	case FI_ATOMIC_COMMITTED:
 		f2fs_mark_inode_dirty_sync(inode, true);
 	}
 }
@@ -3729,6 +3734,8 @@ enum F2FS_SEC_FUA_MODE {
 	F2FS_SEC_FUA_NONE = 0,
 	F2FS_SEC_FUA_ROOT,
 	F2FS_SEC_FUA_DIR,
+	F2FS_SEC_FUA_NODE,
+	F2FS_SEC_FUA_ALL,
 
 	NR_F2FS_SEC_FUA_MODE,
 };
@@ -3759,6 +3766,12 @@ static inline void f2fs_cond_set_fua(struct f2fs_io_info *fio)
 			((fio->type == NODE && !__f2fs_is_cold_node(page)) ||
 			 (fio->type == DATA && S_ISDIR(inode->i_mode))))
 		fio->op_flags |= REQ_FUA;
+	else if (fio->sbi->s_sec_cond_fua_mode == F2FS_SEC_FUA_NODE &&
+			(fio->type == NODE || (fio->type == DATA && S_ISDIR(inode->i_mode))))
+		fio->op_flags |= REQ_FUA;
+	else if (fio->sbi->s_sec_cond_fua_mode == F2FS_SEC_FUA_ALL)
+		fio->op_flags |= REQ_FUA;
+
 	// Directory Inode or Indirect Node -> COLD_BIT X
 	// ref. set_cold_node()
 	else if (fio->type == DATA && f2fs_is_fua_write(inode)) {
@@ -4552,7 +4565,17 @@ static inline void f2fs_set_encrypted_inode(struct inode *inode)
 static inline bool f2fs_post_read_required(struct inode *inode)
 {
 	return f2fs_encrypted_file(inode) || fsverity_active(inode) ||
-		f2fs_compressed_file(inode) || f2fs_is_atomic_file(inode);
+		f2fs_compressed_file(inode);
+}
+
+static inline bool f2fs_used_in_atomic_write(struct inode *inode)
+{
+	return f2fs_is_atomic_file(inode) || f2fs_is_cow_file(inode);
+}
+
+static inline bool f2fs_meta_inode_gc_required(struct inode *inode)
+{
+	return f2fs_post_read_required(inode) || f2fs_used_in_atomic_write(inode);
 }
 
 /*

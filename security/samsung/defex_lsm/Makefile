@@ -8,7 +8,11 @@ SAFEPLACE_ENABLE=true
 IMMUTABLE_ENABLE=true
 LP_ENABLE=true
 UMH_RESTRICTION_ENABLE=true
-TRUSTED_MAP_ENABLE=false
+ifeq ($(filter b6q% q6aq% q6q%, $(TARGET_PRODUCT)),)
+    TRUSTED_MAP_ENABLE=false
+else
+    TRUSTED_MAP_ENABLE=false
+endif
 USER_BUILD=false
 
 # Additional debug
@@ -53,8 +57,9 @@ defex-y += catch_engine/defex_ht.o
 defex-y += defex_rules.o
 defex-$(CONFIG_COMPAT) += catch_engine/defex_catch_list_compat.o
 
-# Immutable Feature is applied with permissive mode first.
-DEFEX_DEFINES := -DDEFEX_PERMISSIVE_IM
+ifeq ($(filter b6s% b6q% q6aq% q6q%, $(TARGET_PRODUCT)),)
+    DEFEX_DEFINES := -DDEFEX_PERMISSIVE_IM
+endif
 
 # Integrity Feature is applied with permissive mode first.
 DEFEX_DEFINES += -DDEFEX_PERMISSIVE_INT

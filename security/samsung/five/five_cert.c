@@ -214,3 +214,12 @@ int five_cert_calc_hash(struct five_cert_body *body_cert, uint8_t *out_hash,
 
 	return 0;
 }
+
+#if defined(CONFIG_SEC_KUNIT)
+EXPORT_SYMBOL_GPL(five_cert_body_alloc);
+EXPORT_SYMBOL_GPL(five_cert_free);
+EXPORT_SYMBOL_GPL(five_cert_append_signature);
+EXPORT_SYMBOL_GPL(five_cert_body_fillout);
+EXPORT_SYMBOL_GPL(five_cert_fillout);
+EXPORT_SYMBOL_GPL(five_cert_calc_hash);
+#endif

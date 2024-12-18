@@ -34,6 +34,7 @@
 void pa_process_file(struct task_struct *task, struct file *file);
 int proca_fcntl_setxattr(struct file *file, void __user *lv_xattr);
 
+#if defined(CONFIG_UML)
 DEFINE_FUNCTION_MOCK(
 	METHOD(call_five_read_xattr), RETURNS(int),
 	PARAMS(struct dentry *, char **));
@@ -45,6 +46,7 @@ DEFINE_FUNCTION_MOCK(
 DEFINE_FUNCTION_MOCK(
 	METHOD(call_vfs_setxattr_noperm), RETURNS(int),
 	PARAMS(struct dentry *, const char *, const void *, size_t, int));
+#endif
 
 #define CORRECT_PTR 2
 #define NOT_S_IFREG	11
@@ -79,6 +81,7 @@ static void five_pa_process_file_has_sign_test(struct kunit *test)
 	pa_process_file(NULL, p_file);
 }
 
+#if defined(CONFIG_UML)
 static char xattr_val[] = "xyz";
 static int ret;
 static void  *five_read_xattr_action(
@@ -115,6 +118,7 @@ static void five_pa_process_file_no_sign_test(struct kunit *test)
 
 	KUNIT_EXPECT_EQ(test, F_SIGNATURE(p_file), (u64)xattr_val);
 }
+#endif
 
 static void five_pafsignature_free_test(struct kunit *test)
 {
@@ -178,6 +182,7 @@ static void five_pa_proca_fcntl_setxattr_flush_returns_error_test(
 		proca_fcntl_setxattr(p_file, &header_lv), -EOPNOTSUPP);
 }
 
+#if defined(CONFIG_UML)
 static int fake_flush_ret_0(struct file *p_file, fl_owner_t id)
 {
 	return 0;
@@ -241,19 +246,24 @@ static void five_pa_proca_fcntl_setxattr_not_allow_sign_test(
 
 	KUNIT_EXPECT_EQ(test, proca_fcntl_setxattr(p_file, &header_lv), -EPERM);
 }
+#endif
 
 static struct kunit_case five_pa_test_cases[] = {
 	KUNIT_CASE(five_pa_process_file_no_file_test),
 	KUNIT_CASE(five_pa_process_file_no_imode_test),
+#if defined(CONFIG_UML)
 	KUNIT_CASE(five_pa_process_file_no_sign_test),
+#endif
 	KUNIT_CASE(five_pa_process_file_has_sign_test),
 	KUNIT_CASE(five_pafsignature_free_test),
 	KUNIT_CASE(five_pa_proca_fcntl_setxattr_no_file_test),
 	KUNIT_CASE(five_pa_proca_fcntl_setxattr_no_lv_xattr_test),
 	KUNIT_CASE(five_pa_proca_fcntl_setxattr_overlength_test),
 	KUNIT_CASE(five_pa_proca_fcntl_setxattr_flush_returns_error_test),
+#if defined(CONFIG_UML)
 	KUNIT_CASE(five_pa_proca_fcntl_setxattr_allow_sign_test),
 	KUNIT_CASE(five_pa_proca_fcntl_setxattr_not_allow_sign_test),
+#endif
 	{},
 };
 

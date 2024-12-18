@@ -1,5 +1,6 @@
 SHELL := /bin/bash
 
+KERNEL := $(VERSION)_$(PATCHLEVEL)
 ifeq ($(CONFIG_MACH_MT6853),y)
     KERNEL := 4_14
 else ifeq ($(CONFIG_MACH_MT6833),y)
@@ -52,8 +53,7 @@ ccflags-y += -I$(srctree)/security/samsung/five/
 
 ifdef CONFIG_PROCA_S_OS
 
-obj-$(CONFIG_PROCA_CERTIFICATES_DB) += s_os/proca_vfs.o \
-                            s_os/proca_certificate_db.o \
+obj-$(CONFIG_PROCA_CERTIFICATES_DB) += s_os/proca_certificate_db.o \
                             s_os/proca_keyring.o \
                             proca_cert_builtin.o \
                             s_os/proca_storage_db.o
@@ -62,7 +62,9 @@ obj-$(CONFIG_PROCA_CERT_DEVICE) += s_os/proca_certificate_dev.o
 
 obj-$(CONFIG_PROCA_CERTIFICATES_XATTR) += s_os/proca_storage_xattr.o
 
-obj-$(CONFIG_PROCA) += s_os/proca_lsm.o
+obj-$(CONFIG_PROCA) += s_os/proca_lsm.o \
+                      s_os/proca_vfs.o \
+                      s_os/proca_audit.o
 
 ccflags-y += -Isecurity/samsung/proca/s_os
 else
@@ -87,9 +89,21 @@ endif
 subdir-ccflags-y += -Wformat
 
 # kunit tests options:
-ifeq ($(CONFIG_SEC_KUNIT)$(CONFIG_UML), yy)
+ENABLED_TARGETS_LIST = ''
+ifeq ($(CONFIG_SEC_KUNIT), y)
   GCOV_PROFILE := y
-  subdir-$(CONFIG_PROCA) += kunit_test
-  obj-$(CONFIG_PROCA) += kunit_test/
-  ccflags-$(CONFIG_PROCA) += -DPROCA_KUNIT_ENABLED
+  ifeq ($(CONFIG_UML), y)
+    ccflags-$(CONFIG_PROCA) += -DPROCA_KUNIT_ENABLED
+    subdir-$(CONFIG_PROCA) += kunit_test
+    obj-$(CONFIG_PROCA) += kunit_test/
+  else
+    ifneq ($(filter $(TARGET_DEVICE),$(ENABLED_TARGETS_LIST)),)
+      $(warning TARGET_DEVICE is $(TARGET_DEVICE). building on-device kunit tests)
+      obj-m += kunit_test/proca_certificate_test.o
+      obj-m += kunit_test/proca_identity_test.o
+      obj-m += kunit_test/proca_table_test.o
+    else
+      $(warning security/samsung/proca: TARGET_DEVICE: $(TARGET_DEVICE). skip on-device kunit test)
+    endif
+  endif
 endif

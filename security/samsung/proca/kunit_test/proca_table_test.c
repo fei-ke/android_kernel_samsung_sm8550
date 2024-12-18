@@ -96,5 +96,6 @@ static struct kunit_suite proca_table_test = {
 	.exit = proca_table_test_exit,
 	.test_cases = security_proca_table_test_cases,
 };
-
 kunit_test_suites(&proca_table_test);
+
+MODULE_LICENSE("GPL v2");

@@ -24,7 +24,8 @@
 #include <linux/mm.h>
 #include <linux/rcupdate.h>
 #include <linux/atomic.h>
-#ifdef PROCA_KUNIT_ENABLED
+#include <linux/string.h>
+#if defined(CONFIG_SEC_KUNIT) && defined(CONFIG_UML)
 #include "asm-generic/io.h"
 #endif
 
@@ -263,6 +264,19 @@ static inline int base64_encode(const u8 *src, int srclen, char *dst)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0)
 #define __vfs_setxattr_noperm(dentry, name, value, size, flags) \
 		__vfs_setxattr_noperm(&init_user_ns, dentry, name, value, size, flags)
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 3, 0)
+#define keyring_search(keyring, type, desc, recurse) \
+		keyring_search(keyring, type, desc)
+#endif
+
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(4, 20, 0)
+static inline size_t str_has_prefix(const char *str, const char *prefix)
+{
+	size_t len = strlen(prefix);
+	return strncmp(str, prefix, len) == 0 ? len : 0;
+}
 #endif
 
 #endif /* __LINUX_PROCA_PORTING_H */

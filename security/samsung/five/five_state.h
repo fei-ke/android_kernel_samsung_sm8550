@@ -22,4 +22,6 @@
 void five_state_proceed(struct task_integrity *integrity,
 			struct file_verification_result *result);
 
+const char *task_integrity_reset_str(enum task_integrity_reset_cause cause);
+
 #endif // __LINUX_FIVE_STATE_MACHINE_H

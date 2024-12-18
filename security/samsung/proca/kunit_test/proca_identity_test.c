@@ -90,3 +90,4 @@ static struct kunit_suite proca_identity_test = {
 };
 kunit_test_suites(&proca_identity_test);
 
+MODULE_LICENSE("GPL v2");

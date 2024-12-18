@@ -42,3 +42,7 @@ void five_set_cache_status(struct integrity_iint_cache *iint,
 	iint->five_status = status;
 }
 
+#if defined(CONFIG_SEC_KUNIT)
+EXPORT_SYMBOL_GPL(five_get_cache_status);
+EXPORT_SYMBOL_GPL(five_set_cache_status);
+#endif

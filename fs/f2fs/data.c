@@ -2051,20 +2051,28 @@ static inline loff_t f2fs_readpage_limit(struct inode *inode)
 	return i_size_read(inode);
 }
 
+struct map_blocks_container {
+	struct f2fs_map_blocks orig;
+	struct f2fs_map_blocks cow;
+};
+
 static int f2fs_read_single_page(struct inode *inode, struct page *page,
 					unsigned nr_pages,
-					struct f2fs_map_blocks *map,
+					struct f2fs_map_blocks *orig_map,
 					struct bio **bio_ret,
 					sector_t *last_block_in_bio,
 					bool is_readahead)
 {
 	struct bio *bio = *bio_ret;
 	const unsigned blocksize = blks_to_bytes(inode, 1);
+	struct map_blocks_container *map_container;
+	struct f2fs_map_blocks *map;
 	sector_t block_in_file;
 	sector_t last_block;
 	sector_t last_block_in_file;
 	sector_t block_nr;
 	int ret = 0;
+	bool use_cow = false;
 
 	block_in_file = (sector_t)page_index(page);
 	last_block = block_in_file + nr_pages;
@@ -2079,6 +2087,14 @@ static int f2fs_read_single_page(struct inode *inode, struct page *page,
 	/*
 	 * Map blocks using the previous result first.
 	 */
+	if (f2fs_is_atomic_file(inode)) {
+		map_container = container_of(orig_map, struct map_blocks_container, orig);
+		map = &map_container->cow;
+		use_cow = true;
+	} else {
+		map = orig_map;
+	}
+check_prev_map:
 	if ((map->m_flags & F2FS_MAP_MAPPED) &&
 			block_in_file > map->m_lblk &&
 			block_in_file < (map->m_lblk + map->m_len))
@@ -2091,7 +2107,10 @@ static int f2fs_read_single_page(struct inode *inode, struct page *page,
 	map->m_lblk = block_in_file;
 	map->m_len = last_block - block_in_file;
 
-	ret = f2fs_map_blocks(inode, map, 0, F2FS_GET_BLOCK_DEFAULT);
+	if (use_cow)
+		ret = f2fs_map_blocks(F2FS_I(inode)->cow_inode, map, 0, F2FS_GET_BLOCK_DEFAULT);
+	else
+		ret = f2fs_map_blocks(inode, map, 0, F2FS_GET_BLOCK_DEFAULT);
 	if (ret)
 		goto out;
 got_it:
@@ -2110,6 +2129,10 @@ got_it:
 			ret = -EFSCORRUPTED;
 			goto out;
 		}
+	} else if (use_cow) {
+		map = orig_map;
+		use_cow = false;
+		goto check_prev_map;
 	} else {
 zero_out:
 		zero_user_segment(page, 0, PAGE_SIZE);
@@ -2347,6 +2370,17 @@ out:
 }
 #endif
 
+static void initiate_map_blocks(struct f2fs_map_blocks *map)
+{
+	map->m_pblk = 0;
+	map->m_lblk = 0;
+	map->m_len = 0;
+	map->m_flags = 0;
+	map->m_next_pgofs = NULL;
+	map->m_next_extent = NULL;
+	map->m_seg_type = NO_CHECK_TYPE;
+	map->m_may_create = false;
+}
 /*
  * This function was originally taken from fs/mpage.c, and customized for f2fs.
  * Major change was from block_size == page_size in f2fs by default.
@@ -2356,7 +2390,7 @@ static int f2fs_mpage_readpages(struct inode *inode,
 {
 	struct bio *bio = NULL;
 	sector_t last_block_in_bio = 0;
-	struct f2fs_map_blocks map;
+	struct map_blocks_container map_container;
 #ifdef CONFIG_F2FS_FS_COMPRESSION
 	struct compress_ctx cc = {
 		.inode = inode,
@@ -2374,14 +2408,9 @@ static int f2fs_mpage_readpages(struct inode *inode,
 	unsigned max_nr_pages = nr_pages;
 	int ret = 0;
 
-	map.m_pblk = 0;
-	map.m_lblk = 0;
-	map.m_len = 0;
-	map.m_flags = 0;
-	map.m_next_pgofs = NULL;
-	map.m_next_extent = NULL;
-	map.m_seg_type = NO_CHECK_TYPE;
-	map.m_may_create = false;
+	initiate_map_blocks(&map_container.orig);
+	if (f2fs_is_atomic_file(inode))
+		initiate_map_blocks(&map_container.cow);
 
 	for (; nr_pages; nr_pages--) {
 		if (rac) {
@@ -2429,7 +2458,7 @@ static int f2fs_mpage_readpages(struct inode *inode,
 read_single_page:
 #endif
 
-		ret = f2fs_read_single_page(inode, page, max_nr_pages, &map,
+		ret = f2fs_read_single_page(inode, page, max_nr_pages, &map_container.orig,
 					&bio, &last_block_in_bio, rac);
 		if (ret) {
 #ifdef CONFIG_F2FS_FS_COMPRESSION
@@ -2616,7 +2645,7 @@ bool f2fs_should_update_outplace(struct inode *inode, struct f2fs_io_info *fio)
 		return true;
 	if (IS_NOQUOTA(inode))
 		return true;
-	if (f2fs_is_atomic_file(inode))
+	if (f2fs_used_in_atomic_write(inode))
 		return true;
 
 	/* swap file is migrating in aligned write mode */
@@ -2804,7 +2833,7 @@ int f2fs_write_single_data_page(struct page *page, int *submitted,
 		.submitted = false,
 		.compr_blocks = compr_blocks,
 		.need_lock = LOCK_RETRY,
-		.post_read = f2fs_post_read_required(inode),
+		.meta_gc = f2fs_meta_inode_gc_required(inode),
 		.io_type = io_type,
 		.io_wbc = wbc,
 		.bio = bio,

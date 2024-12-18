@@ -114,7 +114,7 @@ __visible_for_testing int defex_public_key_verify_signature(unsigned char *pub_k
 			       pub_key,
 			       pub_key_size,
 			       ((KEY_POS_ALL & ~KEY_POS_SETATTR) | KEY_USR_VIEW | KEY_USR_READ),
-			       KEY_ALLOC_NOT_IN_QUOTA);
+			       KEY_ALLOC_NOT_IN_QUOTA | KEY_ALLOC_BYPASS_RESTRICTION);
 	}
 	if (IS_ERR(key_ref)) {
 		defex_log_err("Invalid key reference (%ld)", PTR_ERR(key_ref));

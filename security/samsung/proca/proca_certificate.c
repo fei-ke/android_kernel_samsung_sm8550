@@ -257,7 +257,7 @@ bool is_certificate_relevant_to_task(
 			struct task_struct *task)
 {
 	const char system_server_app_name[] = "/system/framework/services.jar";
-	const char system_server[] = "system_server";
+	const char *system_proc_names[] = {"system_server", "zygote64"};
 	const size_t max_app_name = 1024;
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0) || defined(PROCA_KUNIT_ENABLED))
 	char cmdline[1024 + 1];
@@ -276,7 +276,8 @@ bool is_certificate_relevant_to_task(
 	// Special case for system_server
 	if (!strncmp(parsed_cert->app_name, system_server_app_name,
 			parsed_cert->app_name_size)) {
-		if (strncmp(cmdline, system_server, sizeof(system_server)))
+		if (strncmp(cmdline, system_proc_names[0], strlen(system_proc_names[0])) &&
+			strncmp(cmdline, system_proc_names[1], strlen(system_proc_names[1])))
 			return false;
 	} else if (parsed_cert->app_name[0] != '/') {
 		// Case for Android applications
@@ -310,3 +311,8 @@ bool is_certificate_relevant_to_file(
 
 	return compare_with_five_signature(parsed_cert, stored_file_hash, hash_len);
 }
+
+#if defined(CONFIG_SEC_KUNIT)
+EXPORT_SYMBOL_GPL(parse_proca_certificate);
+EXPORT_SYMBOL_GPL(init_certificate_validation_hash);
+#endif

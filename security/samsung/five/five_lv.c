@@ -62,3 +62,8 @@ int lv_set(struct lv *field, const void *data, uint16_t data_len,
 
 	return 0;
 }
+
+#if defined(CONFIG_SEC_KUNIT)
+EXPORT_SYMBOL_GPL(lv_get_next);
+EXPORT_SYMBOL_GPL(lv_set);
+#endif

@@ -36,6 +36,7 @@ struct task_verification_result {
 #define CRC_VALUE_NO_MATTER 37 // any uint16
 #define FIVE_RESULT 7
 
+#if defined(CONFIG_UML)
 DECLARE_FUNCTION_MOCK(
 	METHOD(call_crc16), RETURNS(u16), PARAMS(u16, u8 const *, size_t));
 
@@ -52,6 +53,7 @@ DEFINE_FUNCTION_MOCK_VOID_RETURN(five_hook_integrity_reset,
 	PARAMS(struct task_struct *,
 	struct file *,
 	enum task_integrity_reset_cause))
+#endif
 
 const char *task_integrity_state_str(enum task_integrity_state_cause cause);
 int is_system_label(struct integrity_label *label);
@@ -457,6 +459,7 @@ static void five_state_proceed_set_next_state_returns_false_test(
 	five_state_proceed(intg, file_result);
 }
 
+#if defined(CONFIG_UML)
 static void five_state_proceed_set_first_state_not_ret_intg_none_test(
 	struct kunit *test)
 {
@@ -588,6 +591,7 @@ static void five_state_proceed_set_next_state_returns_intg_none_test(
 	KUNIT_EXPECT_EQ(test, intg->reset_cause,
 		state_to_reason_cause(STATE_CAUSE_TAMPERED));
 }
+#endif
 
 static struct kunit_case five_state_test_cases[] = {
 	KUNIT_CASE(five_state_task_integrity_state_str_test),
@@ -599,9 +603,11 @@ static struct kunit_case five_state_test_cases[] = {
 	KUNIT_CASE(five_state_set_next_state_test),
 	KUNIT_CASE(five_state_proceed_no_iint_test),
 	KUNIT_CASE(five_state_proceed_set_next_state_returns_false_test),
+#if defined(CONFIG_UML)
 	KUNIT_CASE(five_state_proceed_set_first_state_not_ret_intg_none_test),
 	KUNIT_CASE(five_state_proceed_set_first_state_returns_intg_none_test),
 	KUNIT_CASE(five_state_proceed_set_next_state_returns_intg_none_test),
+#endif
 	{},
 };
 

@@ -21,6 +21,10 @@
 #include <linux/proca.h>
 #include <linux/cdev.h>
 
+#include "five_hooks.h"
+#include "five_state.h"
+
+#include "proca_audit.h"
 #include "proca_identity.h"
 #include "proca_certificate.h"
 #include "proca_task_descr.h"
@@ -31,8 +35,6 @@
 #include "proca_storage.h"
 
 #define PROCA_DEV_NAME "proca_config"
-
-#include "five_hooks.h"
 
 static void proca_task_free_hook(struct task_struct *task);
 
@@ -61,11 +63,16 @@ static void proca_hook_file_skipped(struct task_struct *task,
 				enum task_integrity_value tint_value,
 				struct file *file);
 
+static void proca_hook_reset_integrity(struct task_struct *task,
+				struct file *file,
+				enum task_integrity_reset_cause cause);
+
 static struct five_hook_list five_ops[] = {
 	FIVE_HOOK_INIT(task_forked, proca_hook_task_forked),
 	FIVE_HOOK_INIT(file_processed, proca_hook_file_processed),
 	FIVE_HOOK_INIT(file_signed, proca_hook_file_signed),
 	FIVE_HOOK_INIT(file_skipped, proca_hook_file_skipped),
+	FIVE_HOOK_INIT(integrity_reset2, proca_hook_reset_integrity),
 };
 
 static struct proca_table g_proca_table;
@@ -256,6 +263,15 @@ static void proca_task_free_hook(struct task_struct *task)
 	target_task_descr = proca_table_remove_by_task(&g_proca_table, task);
 
 	destroy_proca_task_descr(target_task_descr);
+}
+
+static void proca_hook_reset_integrity(struct task_struct *task,
+			struct file *file,
+			enum task_integrity_reset_cause cause)
+{
+	if (proca_table_get_by_task(&g_proca_table, task))
+		proca_audit_err(task, file, "proca_reset_integrity",
+				task_integrity_reset_str(cause));
 }
 
 #ifndef LINUX_LSM_SUPPORTED

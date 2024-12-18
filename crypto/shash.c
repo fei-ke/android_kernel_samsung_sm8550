@@ -18,6 +18,10 @@
 
 #include "internal.h"
 
+#if defined(CONFIG_CRYPTO_SKC_FIPS)
+#include "fips140_3_services_internal.h"
+#endif  // CONFIG_CRYPTO_SKC_FIPS
+
 static const struct crypto_type crypto_shash_type;
 
 static int shash_no_setkey(struct crypto_shash *tfm, const u8 *key,
@@ -72,6 +76,10 @@ int crypto_shash_setkey(struct crypto_shash *tfm, const u8 *key,
 	struct shash_alg *shash = crypto_shash_alg(tfm);
 	unsigned long alignmask = crypto_shash_alignmask(tfm);
 	int err;
+
+#if defined(CONFIG_CRYPTO_SKC_FIPS)
+	crypto_hmac_set_key_approve_status(tfm, keylen);
+#endif  // CONFIG_CRYPTO_SKC_FIPS
 
 	if ((unsigned long)key & alignmask)
 		err = shash_setkey_unaligned(tfm, key, keylen);
@@ -149,6 +157,9 @@ static int shash_final_unaligned(struct shash_desc *desc, u8 *out)
 	if (WARN_ON(buf + ds > ubuf + sizeof(ubuf)))
 		return -EINVAL;
 
+#if defined(CONFIG_CRYPTO_SKC_FIPS)
+	calc_final_state_service_indicator(tfm);
+#endif  // CONFIG_CRYPTO_SKC_FIPS
 	err = shash->final(desc, buf);
 	if (err)
 		goto out;
@@ -169,6 +180,9 @@ int crypto_shash_final(struct shash_desc *desc, u8 *out)
 	if ((unsigned long)out & alignmask)
 		return shash_final_unaligned(desc, out);
 
+#if defined(CONFIG_CRYPTO_SKC_FIPS)
+	calc_final_state_service_indicator(tfm);
+#endif  // CONFIG_CRYPTO_SKC_FIPS
 	return shash->final(desc, out);
 }
 EXPORT_SYMBOL_GPL(crypto_shash_final);
@@ -190,6 +204,9 @@ int crypto_shash_finup(struct shash_desc *desc, const u8 *data,
 	if (((unsigned long)data | (unsigned long)out) & alignmask)
 		return shash_finup_unaligned(desc, data, len, out);
 
+#if defined(CONFIG_CRYPTO_SKC_FIPS)
+	calc_final_state_service_indicator(tfm);
+#endif  // CONFIG_CRYPTO_SKC_FIPS
 	return shash->finup(desc, data, len, out);
 }
 EXPORT_SYMBOL_GPL(crypto_shash_finup);
